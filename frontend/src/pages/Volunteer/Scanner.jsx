@@ -171,8 +171,35 @@ export default function Scanner() {
     setManualInput('');
   };
 
+  // Check auth status for debugging
+  const accessToken = localStorage.getItem('accessToken');
+  const refreshToken = localStorage.getItem('refreshToken');
+
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div className="space-y-4">
+      {/* Auth Status Display - FOR DEBUGGING */}
+      <div className={`p-4 rounded-lg border-2 ${accessToken ? 'bg-green-50 border-green-300' : 'bg-red-50 border-red-300'}`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-semibold text-sm">
+              {accessToken ? '✅ Authenticated' : '❌ Not Authenticated'}
+            </h3>
+            <p className="text-xs mt-1">
+              Access Token: {accessToken ? `Present (${accessToken.substring(0, 20)}...)` : 'Missing'}
+            </p>
+            <p className="text-xs">
+              Refresh Token: {refreshToken ? `Present (${refreshToken.substring(0, 20)}...)` : 'Missing'}
+            </p>
+          </div>
+          {!accessToken && (
+            <div className="text-xs text-red-700">
+              ⚠️ Please refresh page or re-login
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* QR Scanner */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
@@ -392,6 +419,7 @@ export default function Scanner() {
             })
           )}
         </div>
+      </div>
       </div>
     </div>
   );
