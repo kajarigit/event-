@@ -41,8 +41,12 @@ const Attendance = sequelize.define('Attendance', {
   tableName: 'attendances',
   indexes: [
     {
-      unique: true,
-      fields: ['eventId', 'studentId']
+      // Non-unique index for querying (removed unique constraint to allow multiple check-ins/check-outs)
+      fields: ['eventId', 'studentId', 'checkInTime']
+    },
+    {
+      // Index for status queries
+      fields: ['eventId', 'status']
     }
   ]
 });
