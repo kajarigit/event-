@@ -19,7 +19,7 @@ export default function Analytics() {
     },
   });
 
-  // Fetch analytics data
+  // Fetch analytics data with auto-refresh
   const { data: topStudents = [] } = useQuery({
     queryKey: ['topStudents', selectedEvent],
     queryFn: async () => {
@@ -27,6 +27,7 @@ export default function Analytics() {
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
+    refetchInterval: 5000, // Auto-refresh every 5 seconds
   });
 
   const { data: mostReviewers = [] } = useQuery({
@@ -36,6 +37,7 @@ export default function Analytics() {
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
+    refetchInterval: 5000,
   });
 
   const { data: topStalls = [] } = useQuery({
@@ -45,6 +47,7 @@ export default function Analytics() {
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
+    refetchInterval: 5000,
   });
 
   const { data: deptStats = [] } = useQuery({
@@ -54,6 +57,7 @@ export default function Analytics() {
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
+    refetchInterval: 5000,
   });
 
   const handleExport = async (type) => {

@@ -377,7 +377,7 @@ exports.getMyFeedbacks = async (req, res, next) => {
 exports.getAttendance = async (req, res, next) => {
   try {
     const studentId = req.user.id;
-    const { eventId } = req.query;
+    const { eventId } = req.params; // Changed from req.query to req.params
 
     const where = { studentId };
     if (eventId) {

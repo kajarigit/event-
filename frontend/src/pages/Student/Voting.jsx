@@ -98,8 +98,8 @@ export default function StudentVoting() {
       return;
     }
 
-    if (!status?.checkedIn) {
-      toast.error('You must be checked-in to vote');
+    if (!status?.isCheckedIn) {
+      toast.error('You must be checked in to vote');
       return;
     }
 
@@ -175,7 +175,7 @@ export default function StudentVoting() {
       {selectedEvent && (
         <>
           {/* Check-in Status Warning */}
-          {!status?.checkedIn && (
+          {!status?.isCheckedIn && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start space-x-3">
               <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
               <div>
@@ -237,7 +237,7 @@ export default function StudentVoting() {
                     setSelectedStalls({ ...selectedStalls, [rank]: e.target.value })
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-3"
-                  disabled={!status?.checkedIn}
+                  disabled={!status?.isCheckedIn}
                 >
                   <option value="">-- Select Stall --</option>
                   {getAvailableStalls(rank).map((stall) => (
@@ -249,7 +249,7 @@ export default function StudentVoting() {
 
                 <button
                   onClick={() => handleSubmitVote(rank)}
-                  disabled={!selectedStalls[rank] || voteMutation.isLoading || !status?.checkedIn}
+                  disabled={!selectedStalls[rank] || voteMutation.isLoading || !status?.isCheckedIn}
                   className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {voteMutation.isLoading ? 'Submitting...' : `Vote for Rank ${rank}`}

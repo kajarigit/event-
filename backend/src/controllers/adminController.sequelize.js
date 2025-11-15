@@ -634,8 +634,7 @@ exports.bulkUploadUsers = async (req, res, next) => {
  */
 exports.getTopStudentsByStayTime = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
-    const { limit = 10 } = req.query;
+    const { eventId, limit = 10 } = req.query;
 
     // Query to calculate stay time
     const results = await sequelize.query(
@@ -670,8 +669,7 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
 
 exports.getMostReviewers = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
-    const { limit = 10 } = req.query;
+    const { eventId, limit = 10 } = req.query;
 
     const results = await sequelize.query(
       `
@@ -709,8 +707,7 @@ exports.getMostReviewers = async (req, res, next) => {
 
 exports.getTopStallsByVotes = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
-    const { limit = 10 } = req.query;
+    const { eventId, limit = 10 } = req.query;
 
     const results = await sequelize.query(
       `
@@ -746,7 +743,7 @@ exports.getTopStallsByVotes = async (req, res, next) => {
 
 exports.getDepartmentStats = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { eventId } = req.query;
 
     const results = await sequelize.query(
       `
@@ -780,7 +777,7 @@ exports.getDepartmentStats = async (req, res, next) => {
 
 exports.getEventOverview = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { eventId } = req.query;
 
     const event = await Event.findByPk(eventId);
     if (!event) {

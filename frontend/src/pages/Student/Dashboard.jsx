@@ -4,7 +4,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { studentApi } from '../../services/api';
 import { useState, useEffect } from 'react';
-import { Home, QrCode, Vote, MessageSquare, Clock, LogOut, Lock, Sparkles, CheckCircle2, AlertCircle, Moon, Sun } from 'lucide-react';
+import { Home, QrCode, Vote, MessageSquare, Clock, LogOut, Lock, Sparkles, CheckCircle2, AlertCircle, Moon, Sun, History } from 'lucide-react';
 
 // Student sub-pages
 import StudentHome from './Home';
@@ -12,6 +12,7 @@ import StudentQR from './QRCode';
 import StudentVoting from './Voting';
 import StudentFeedback from './Feedback';
 import StudentAttendance from './Attendance';
+import AttendanceHistory from './AttendanceHistory';
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
@@ -68,6 +69,7 @@ export default function StudentDashboard() {
     { name: 'Voting', path: 'voting', icon: Vote, requiresCheckin: true },
     { name: 'Feedback', path: 'feedback', icon: MessageSquare, requiresCheckin: true },
     { name: 'Attendance', path: 'attendance', icon: Clock, requiresCheckin: false },
+    { name: 'History', path: 'history', icon: History, requiresCheckin: false },
   ];
 
   return (
@@ -228,6 +230,7 @@ export default function StudentDashboard() {
               } 
             />
             <Route path="attendance" element={<StudentAttendance />} />
+            <Route path="history" element={<AttendanceHistory />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>
         </div>
