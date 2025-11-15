@@ -112,6 +112,8 @@ export const adminApi = {
   updateEvent: (id, data) => api.put(`/admin/events/${id}`, data),
   deleteEvent: (id) => api.delete(`/admin/events/${id}`),
   toggleEventActive: (id) => api.put(`/admin/events/${id}/toggle-active`),
+  manuallyStartEvent: (id) => api.patch(`/admin/events/${id}/start`),
+  manuallyEndEvent: (id) => api.patch(`/admin/events/${id}/end`),
 
   // Stalls
   getStalls: (params) => api.get('/admin/stalls', { params }),

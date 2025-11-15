@@ -118,6 +118,69 @@ exports.deleteEvent = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Manually start an event (override schedule)
+ * @route   PATCH /api/admin/events/:id/start
+ * @access  Private (Admin)
+ */
+exports.manuallyStartEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findByPk(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    await event.update({
+      manuallyStarted: true,
+      isActive: true,
+      manuallyEnded: false  // Clear manual end if restarting
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Event started manually',
+      data: event,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Manually end an event (override schedule)
+ * @route   PATCH /api/admin/events/:id/end
+ * @access  Private (Admin)
+ */
+exports.manuallyEndEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findByPk(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    await event.update({
+      manuallyEnded: true,
+      isActive: false
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Event ended manually',
+      data: event,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.toggleEventActive = async (req, res, next) => {
   try {
     const event = await Event.findByPk(req.params.id);

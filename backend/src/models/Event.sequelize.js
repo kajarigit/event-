@@ -17,11 +17,13 @@ const Event = sequelize.define('Event', {
   },
   startDate: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: true,  // Make optional
+    defaultValue: DataTypes.NOW  // Default to current time
   },
   endDate: {
     type: DataTypes.DATE,
-    allowNull: false
+    allowNull: true,  // Make optional
+    defaultValue: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)  // Default to 7 days from now
   },
   venue: {
     type: DataTypes.STRING,
@@ -30,6 +32,16 @@ const Event = sequelize.define('Event', {
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: false
+  },
+  manuallyStarted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Admin manually started the event'
+  },
+  manuallyEnded: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'Admin manually ended the event'
   },
   maxVotesPerStudent: {
     type: DataTypes.INTEGER,

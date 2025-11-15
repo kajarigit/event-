@@ -12,6 +12,8 @@ import {
   ToggleLeft,
   ToggleRight,
   X,
+  Play,
+  Square,
 } from 'lucide-react';
 
 export default function Events() {
@@ -86,6 +88,30 @@ export default function Events() {
     },
   });
 
+  // Manually start event mutation
+  const startMutation = useMutation({
+    mutationFn: (id) => adminApi.manuallyStartEvent(id),
+    onSuccess: () => {
+      toast.success('Event started manually!');
+      queryClient.invalidateQueries(['adminEvents']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to start event');
+    },
+  });
+
+  // Manually end event mutation
+  const endMutation = useMutation({
+    mutationFn: (id) => adminApi.manuallyEndEvent(id),
+    onSuccess: () => {
+      toast.success('Event ended manually!');
+      queryClient.invalidateQueries(['adminEvents']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to end event');
+    },
+  });
+
   const openCreateModal = () => {
     setEditingEvent(null);
     setFormData({
@@ -150,6 +176,18 @@ export default function Events() {
 
   const handleToggle = (event) => {
     toggleMutation.mutate(event.id);
+  };
+
+  const handleManualStart = (event) => {
+    if (window.confirm(`Manually start "${event.name}" now? This overrides the scheduled start time.`)) {
+      startMutation.mutate(event.id);
+    }
+  };
+
+  const handleManualEnd = (event) => {
+    if (window.confirm(`Manually end "${event.name}" now? This will prevent all further check-ins.`)) {
+      endMutation.mutate(event.id);
+    }
   };
 
   return (
@@ -266,6 +304,42 @@ export default function Events() {
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
+                        {/* Manual Start Button */}
+                        {!event.manuallyStarted && !event.manuallyEnded && (
+                          <button
+                            onClick={() => handleManualStart(event)}
+                            className="text-green-600 hover:text-green-900 flex items-center gap-1 px-2 py-1 border border-green-300 rounded hover:bg-green-50"
+                            title="Start Event Now"
+                          >
+                            <Play className="w-4 h-4" />
+                            <span className="text-xs">Start</span>
+                          </button>
+                        )}
+                        
+                        {/* Manual End Button */}
+                        {event.manuallyStarted && !event.manuallyEnded && (
+                          <button
+                            onClick={() => handleManualEnd(event)}
+                            className="text-red-600 hover:text-red-900 flex items-center gap-1 px-2 py-1 border border-red-300 rounded hover:bg-red-50"
+                            title="End Event Now"
+                          >
+                            <Square className="w-4 h-4" />
+                            <span className="text-xs">End</span>
+                          </button>
+                        )}
+                        
+                        {/* Status badges */}
+                        {event.manuallyStarted && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+                            Live
+                          </span>
+                        )}
+                        {event.manuallyEnded && (
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                            Ended
+                          </span>
+                        )}
+                        
                         <button
                           onClick={() => openEditModal(event)}
                           className="text-blue-600 hover:text-blue-900"

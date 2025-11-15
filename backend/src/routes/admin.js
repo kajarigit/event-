@@ -31,6 +31,8 @@ router.get('/events/:id', adminController.getEvent);
 router.put('/events/:id', adminController.updateEvent);
 router.delete('/events/:id', adminController.deleteEvent);
 router.put('/events/:id/toggle-active', adminController.toggleEventActive);
+router.patch('/events/:id/start', adminController.manuallyStartEvent);
+router.patch('/events/:id/end', adminController.manuallyEndEvent);
 
 // Stalls
 router.get('/stalls', adminController.getStalls);

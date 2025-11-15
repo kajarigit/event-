@@ -189,9 +189,20 @@ exports.scanStudent = async (req, res, next) => {
       });
     }
 
-    // VALIDATION 11: Check event dates
+    // VALIDATION 11: Check event dates (with manual override)
     const now = new Date();
     
+    // Check if manually ended
+    if (event.manuallyEnded) {
+      await transaction.rollback();
+      console.error('❌ [SCAN] Event manually ended by admin:', event.id);
+      return res.status(403).json({
+        success: false,
+        message: 'This event has been ended by admin',
+      });
+    }
+    
+    // Check if ended by date
     if (event.endDate && now > new Date(event.endDate)) {
       await transaction.rollback();
       console.error('❌ [SCAN] Event ended:', {
@@ -205,12 +216,14 @@ exports.scanStudent = async (req, res, next) => {
       });
     }
 
-    if (event.startDate && now < new Date(event.startDate)) {
+    // Check if started (unless manually started by admin)
+    if (!event.manuallyStarted && event.startDate && now < new Date(event.startDate)) {
       await transaction.rollback();
       console.error('❌ [SCAN] Event not started:', {
         eventId: event.id,
         startDate: event.startDate,
-        now
+        now,
+        manuallyStarted: event.manuallyStarted
       });
       return res.status(403).json({
         success: false,
