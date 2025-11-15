@@ -43,7 +43,12 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) {
-          throw new Error('No refresh token');
+          // Clear tokens and reject with better error message
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          const authError = new Error('Session expired. Please login again.');
+          authError.response = error.response;
+          throw authError;
         }
 
         const response = await axios.post(`${API_URL}/auth/refresh-token`, {

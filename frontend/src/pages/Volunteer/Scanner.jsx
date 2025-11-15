@@ -108,6 +108,7 @@ export default function Scanner() {
     if (useManualMode) return; // Skip camera if manual mode is active
 
     let scanner;
+    let isActive = true; // Track if component is still mounted
 
     const initScanner = () => {
       scanner = new Html5QrcodeScanner('qr-reader', {
@@ -119,6 +120,8 @@ export default function Scanner() {
       scanner.render(
         (decodedText) => {
           // QR code successfully scanned
+          if (!isActive) return; // Don't process if component unmounted
+          
           console.log('QR Code scanned:', decodedText);
           scanner.pause(true);
           setScanning(false);
@@ -128,15 +131,19 @@ export default function Scanner() {
           
           // Resume scanning after 3 seconds
           setTimeout(() => {
-            scanner.resume();
-            setScanning(true);
+            if (isActive && scanner) {
+              scanner.resume();
+              setScanning(true);
+            }
           }, 3000);
         },
         (errorMessage) => {
           // Check if camera access error
           if (errorMessage.includes('NotAllowedError') || errorMessage.includes('secure context')) {
             console.warn('Camera not available, switching to manual mode');
-            setUseManualMode(true);
+            if (isActive) {
+              setUseManualMode(true);
+            }
           }
         }
       );
@@ -149,12 +156,26 @@ export default function Scanner() {
       initScanner();
     } catch (error) {
       console.error('Scanner initialization failed:', error);
-      setUseManualMode(true);
+      if (isActive) {
+        setUseManualMode(true);
+      }
     }
 
     return () => {
+      isActive = false; // Mark component as unmounted
       if (scanner) {
-        scanner.clear().catch(console.error);
+        try {
+          // Clear scanner safely
+          scanner.clear().catch((err) => {
+            // Ignore DOM errors during cleanup
+            if (!err.message?.includes('removeChild')) {
+              console.error('Scanner cleanup error:', err);
+            }
+          });
+        } catch (err) {
+          // Silently ignore cleanup errors
+          console.debug('Scanner already cleaned up');
+        }
       }
     };
   }, [useManualMode]);
@@ -175,6 +196,19 @@ export default function Scanner() {
   const accessToken = localStorage.getItem('accessToken');
   const refreshToken = localStorage.getItem('refreshToken');
 
+  // Test auth endpoint
+  const testAuth = async () => {
+    try {
+      console.log('🧪 Testing /auth/me endpoint...');
+      const response = await volunteerApi.getRecentScans(); // This requires auth
+      console.log('✅ Auth test successful:', response.data);
+      toast.success('Authentication working!');
+    } catch (error) {
+      console.log('❌ Auth test failed:', error.response?.status, error.response?.data);
+      toast.error(`Auth failed: ${error.response?.data?.message || error.message}`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Auth Status Display - FOR DEBUGGING */}
@@ -191,11 +225,21 @@ export default function Scanner() {
               Refresh Token: {refreshToken ? `Present (${refreshToken.substring(0, 20)}...)` : 'Missing'}
             </p>
           </div>
-          {!accessToken && (
-            <div className="text-xs text-red-700">
-              ⚠️ Please refresh page or re-login
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            {!accessToken && (
+              <div className="text-xs text-red-700">
+                ⚠️ Please refresh page or re-login
+              </div>
+            )}
+            {accessToken && (
+              <button
+                onClick={testAuth}
+                className="btn-secondary text-xs px-3 py-1"
+              >
+                Test Auth
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
