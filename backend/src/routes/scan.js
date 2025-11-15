@@ -14,9 +14,7 @@ router.post(
   authorize('volunteer', 'admin'),
   scanLimiter,
   [
-    body('token').notEmpty().withMessage('Student QR token is required'),
-    body('eventId').notEmpty().withMessage('Event ID is required'),
-    body('gate').optional().trim(),
+    body('qrToken').notEmpty().withMessage('QR token is required'),
   ],
   validate,
   scanController.scanStudent
