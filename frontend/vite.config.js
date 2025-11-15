@@ -28,6 +28,8 @@ export default defineConfig({
     outDir: 'dist',
     sourcemap: false,
     chunkSizeWarningLimit: 1000,
+    // Copy _redirects file to dist for Render SPA routing
+    copyPublicDir: true,
   },
   preview: {
     port: 3000,
