@@ -2,32 +2,64 @@ const { Sequelize } = require('sequelize');
 const logger = require('./logger');
 
 // PostgreSQL connection configuration
-// Use DATABASE_URL if provided, otherwise construct from individual env vars
-const databaseUrl = process.env.DATABASE_URL || 
-  `postgres://${process.env.DB_USER}:${process.env.DB_PASSWORD}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+let sequelize;
 
-const sequelize = new Sequelize(databaseUrl, {
-  dialect: 'postgres',
-  dialectOptions: {
-    ssl: process.env.DB_SSL === 'true' ? {
-      require: true,
-      rejectUnauthorized: false // Accept self-signed certificates
-    } : false
-  },
-  logging: (msg) => logger.debug(msg),
-  pool: {
-    max: 20,
-    min: 0,
-    acquire: 30000,
-    idle: 10000
-  },
-  define: {
-    timestamps: true,
-    underscored: false, // Keep camelCase field names
-    createdAt: 'createdAt',
-    updatedAt: 'updatedAt'
-  }
-});
+if (process.env.DATABASE_URL) {
+  // Use DATABASE_URL if provided (Render/production)
+  sequelize = new Sequelize(process.env.DATABASE_URL, {
+    dialect: 'postgres',
+    dialectOptions: {
+      ssl: {
+        require: true,
+        rejectUnauthorized: false
+      }
+    },
+    logging: (msg) => logger.debug(msg),
+    pool: {
+      max: 20,
+      min: 0,
+      acquire: 30000,
+      idle: 10000
+    },
+    define: {
+      timestamps: true,
+      underscored: false,
+      createdAt: 'createdAt',
+      updatedAt: 'updatedAt'
+    }
+  });
+} else {
+  // Use individual environment variables (local development)
+  sequelize = new Sequelize(
+    process.env.DB_NAME || 'defaultdb',
+    process.env.DB_USER || 'avnadmin',
+    process.env.DB_PASSWORD,
+    {
+      host: process.env.DB_HOST,
+      port: process.env.DB_PORT || 19044,
+      dialect: 'postgres',
+      dialectOptions: {
+        ssl: process.env.DB_SSL === 'true' ? {
+          require: true,
+          rejectUnauthorized: false
+        } : false
+      },
+      logging: (msg) => logger.debug(msg),
+      pool: {
+        max: 20,
+        min: 0,
+        acquire: 30000,
+        idle: 10000
+      },
+      define: {
+        timestamps: true,
+        underscored: false,
+        createdAt: 'createdAt',
+        updatedAt: 'updatedAt'
+      }
+    }
+  );
+}
 
 // Test connection
 const connectDB = async () => {
