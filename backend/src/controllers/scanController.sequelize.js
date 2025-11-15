@@ -1,0 +1,534 @@
+const { Attendance, ScanLog, Event, User, Stall, Feedback, Vote, sequelize } = require('../models/index.sequelize');
+const { verifyQRToken } = require('../utils/jwt');
+const { Op } = require('sequelize');
+
+/**
+ * @desc    Scan student QR at gate (check-in/check-out)
+ * @route   POST /api/scan/student
+ * @access  Private (Volunteer, Admin)
+ */
+exports.scanStudent = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { qrToken } = req.body;
+    const volunteerId = req.user.id;
+
+    // Validate QR token exists
+    if (!qrToken) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'QR token is required',
+      });
+    }
+
+    // Verify QR token
+    let decoded;
+    try {
+      decoded = verifyQRToken(qrToken);
+    } catch (error) {
+      await transaction.rollback();
+      
+      // Handle expired QR codes
+      if (error.message.includes('expired')) {
+        return res.status(400).json({
+          success: false,
+          message: 'QR code has expired. Please generate a new one.',
+        });
+      }
+      
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid QR code: ' + error.message,
+      });
+    }
+
+    // Validate token type
+    if (decoded.type !== 'student') {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid QR code type. This is not a student QR code.',
+      });
+    }
+
+    const { studentId, eventId } = decoded;
+
+    // Validate student exists and is active
+    const student = await User.findByPk(studentId, { transaction });
+    if (!student) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found in the system',
+      });
+    }
+
+    if (!student.isActive) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'Student account is inactive. Please contact admin.',
+      });
+    }
+
+    if (student.role !== 'student') {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'This QR code does not belong to a student',
+      });
+    }
+
+    // Validate event exists and is active
+    const event = await Event.findByPk(eventId, { transaction });
+    if (!event) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    if (!event.isActive) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'This event is no longer active',
+      });
+    }
+
+    // Check if event has ended
+    if (event.endDate && new Date() > new Date(event.endDate)) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'This event has already ended',
+      });
+    }
+
+    // Check if event hasn't started yet
+    if (event.startDate && new Date() < new Date(event.startDate)) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'This event has not started yet',
+      });
+    }
+
+    // Check current attendance status
+    const currentAttendance = await Attendance.findOne({
+      where: {
+        studentId,
+        eventId,
+        status: 'checked-in',
+      },
+      transaction,
+    });
+
+    let action, attendance;
+
+    if (!currentAttendance) {
+      // CHECK IN
+      // Prevent duplicate check-ins (check for recent check-out)
+      const recentCheckout = await Attendance.findOne({
+        where: {
+          studentId,
+          eventId,
+          status: 'checked-out',
+          checkOutTime: {
+            [Op.gte]: new Date(Date.now() - 60000), // Within last minute
+          },
+        },
+        transaction,
+      });
+
+      if (recentCheckout) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'You just checked out. Please wait a minute before checking in again.',
+        });
+      }
+
+      attendance = await Attendance.create(
+        {
+          studentId,
+          eventId,
+          checkInTime: new Date(),
+          status: 'checked-in',
+        },
+        { transaction }
+      );
+      action = 'in';
+    } else {
+      // CHECK OUT
+      // Prevent immediate re-checkout
+      if (currentAttendance.checkInTime > new Date(Date.now() - 30000)) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'You just checked in. Please wait at least 30 seconds before checking out.',
+        });
+      }
+
+      await currentAttendance.update(
+        {
+          checkOutTime: new Date(),
+          status: 'checked-out',
+        },
+        { transaction }
+      );
+      attendance = currentAttendance;
+      action = 'out';
+    }
+
+    // Create scan log
+    await ScanLog.create(
+      {
+        userId: volunteerId,
+        eventId,
+        scanType: action === 'in' ? 'check-in' : 'check-out',
+        scanTime: new Date(),
+        status: 'success',
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    res.status(200).json({
+      success: true,
+      message: `Student ${action === 'in' ? 'checked in' : 'checked out'} successfully`,
+      data: {
+        action,
+        student: {
+          id: student.id,
+          name: student.name,
+          rollNumber: student.rollNumber,
+          department: student.department,
+        },
+        event: {
+          id: event.id,
+          name: event.name,
+        },
+        attendance,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+/**
+ * @desc    Scan stall QR (for voting/feedback)
+ * @route   POST /api/scan/stall
+ * @access  Private (Student)
+ */
+exports.scanStall = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const { qrToken, action } = req.body; // action: 'vote' or 'feedback'
+    const studentId = req.user.id;
+
+    if (!qrToken) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'QR token is required',
+      });
+    }
+
+    // Verify QR token
+    let decoded;
+    try {
+      decoded = verifyQRToken(qrToken);
+    } catch (error) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired QR code',
+      });
+    }
+
+    if (decoded.type !== 'stall') {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid QR code type. This is not a stall QR code.',
+      });
+    }
+
+    const { stallId, eventId } = decoded;
+
+    // Validate stall exists
+    const stall = await Stall.findByPk(stallId, { transaction });
+    if (!stall || !stall.isActive) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Stall not found or inactive',
+      });
+    }
+
+    // Validate event
+    const event = await Event.findByPk(eventId, { transaction });
+    if (!event || !event.isActive) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found or inactive',
+      });
+    }
+
+    // Check if student is checked in
+    const attendance = await Attendance.findOne({
+      where: {
+        studentId,
+        eventId,
+        status: 'checked-in',
+      },
+      transaction,
+    });
+
+    if (!attendance) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: 'You must be checked in to the event to interact with stalls',
+      });
+    }
+
+    // Handle vote or feedback based on action
+    let result;
+    if (action === 'vote') {
+      if (!event.allowVoting) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          message: 'Voting is not allowed for this event',
+        });
+      }
+
+      // Check if already voted
+      const existingVote = await Vote.findOne({
+        where: { studentId, stallId, eventId },
+        transaction,
+      });
+
+      if (existingVote) {
+        await transaction.rollback();
+        return res.status(400).json({
+          success: false,
+          message: 'You have already voted for this stall',
+        });
+      }
+
+      // Check vote limit
+      const voteCount = await Vote.count({
+        where: { studentId, eventId },
+        transaction,
+      });
+
+      if (voteCount >= (event.maxVotesPerStudent || 3)) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          message: `You have reached the maximum number of votes (${event.maxVotesPerStudent || 3})`,
+        });
+      }
+
+      result = await Vote.create(
+        {
+          studentId,
+          stallId,
+          eventId,
+        },
+        { transaction }
+      );
+    } else if (action === 'feedback') {
+      if (!event.allowFeedback) {
+        await transaction.rollback();
+        return res.status(403).json({
+          success: false,
+          message: 'Feedback is not allowed for this event',
+        });
+      }
+
+      // Note: Actual feedback submission might be a separate endpoint
+      // This just validates the scan
+      result = { message: 'Scan successful. You can now submit feedback.' };
+    } else {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid action. Must be "vote" or "feedback"',
+      });
+    }
+
+    // Create scan log
+    await ScanLog.create(
+      {
+        userId: studentId,
+        eventId,
+        stallId,
+        scanType: action,
+        scanTime: new Date(),
+        status: 'success',
+      },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    res.status(200).json({
+      success: true,
+      message: `Stall scanned successfully for ${action}`,
+      data: {
+        stall: {
+          id: stall.id,
+          name: stall.name,
+          category: stall.category,
+        },
+        action,
+        result,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get scan logs (for admin/volunteer)
+ * @route   GET /api/scan/logs
+ * @access  Private (Admin, Volunteer)
+ */
+exports.getScanLogs = async (req, res, next) => {
+  try {
+    const { eventId, userId, scanType, status, limit = 50, page = 1 } = req.query;
+
+    const where = {};
+    if (eventId) where.eventId = eventId;
+    if (userId) where.userId = userId;
+    if (scanType) where.scanType = scanType;
+    if (status) where.status = status;
+
+    const { count, rows: logs } = await ScanLog.findAndCountAll({
+      where,
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email', 'role'],
+        },
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: Stall,
+          as: 'stall',
+          attributes: ['id', 'name', 'category'],
+          required: false,
+        },
+      ],
+      order: [['scanTime', 'DESC']],
+      limit: parseInt(limit),
+      offset: (parseInt(page) - 1) * parseInt(limit),
+    });
+
+    res.status(200).json({
+      success: true,
+      count: logs.length,
+      total: count,
+      page: parseInt(page),
+      pages: Math.ceil(count / parseInt(limit)),
+      data: logs,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get single scan log
+ * @route   GET /api/scan/logs/:id
+ * @access  Private (Admin, Volunteer)
+ */
+exports.getScanLogById = async (req, res, next) => {
+  try {
+    const log = await ScanLog.findByPk(req.params.id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email', 'role'],
+        },
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name'],
+        },
+        {
+          model: Stall,
+          as: 'stall',
+          attributes: ['id', 'name', 'category'],
+          required: false,
+        },
+      ],
+    });
+
+    if (!log) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scan log not found',
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: log,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Flag scan error
+ * @route   PATCH /api/scan/logs/:id/flag
+ * @access  Private (Admin)
+ */
+exports.flagScanError = async (req, res, next) => {
+  try {
+    const { errorMessage } = req.body;
+
+    const log = await ScanLog.findByPk(req.params.id);
+
+    if (!log) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scan log not found',
+      });
+    }
+
+    await log.update({
+      status: 'failed',
+      errorMessage: errorMessage || 'Flagged by admin',
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Scan log flagged successfully',
+      data: log,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
