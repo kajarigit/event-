@@ -6,12 +6,15 @@ let sequelize;
 
 if (process.env.DATABASE_URL) {
   // Use DATABASE_URL if provided (Render/production)
-  sequelize = new Sequelize(process.env.DATABASE_URL, {
+  // Remove ?sslmode=require from URL as we handle SSL in dialectOptions
+  const cleanUrl = process.env.DATABASE_URL.replace(/\?sslmode=require$/, '');
+  
+  sequelize = new Sequelize(cleanUrl, {
     dialect: 'postgres',
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false
+        rejectUnauthorized: false // Accept Aiven's self-signed certificates
       }
     },
     logging: (msg) => logger.debug(msg),
