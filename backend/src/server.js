@@ -18,6 +18,9 @@ const adminRoutes = require('./routes/admin');
 // Create Express app
 const app = express();
 
+// Trust proxy - Required for Render.com and rate limiting
+app.set('trust proxy', 1);
+
 // Connect to database and sync models
 connectDB().then(() => syncModels());
 
