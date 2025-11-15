@@ -424,7 +424,7 @@ exports.getScanLogs = async (req, res, next) => {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'name', 'email', 'role'],
+          attributes: ['id', 'name', 'email', 'role', 'rollNumber', 'department'],
         },
         {
           model: Event,
@@ -443,13 +443,27 @@ exports.getScanLogs = async (req, res, next) => {
       offset: (parseInt(page) - 1) * parseInt(limit),
     });
 
+    // Transform data to match frontend expectations (studentId field)
+    const transformedLogs = logs.map(log => {
+      const logData = log.toJSON();
+      // Map 'user' to 'studentId' for consistency with frontend
+      if (logData.user) {
+        logData.studentId = {
+          name: logData.user.name,
+          rollNo: logData.user.rollNumber,
+          department: logData.user.department,
+        };
+      }
+      return logData;
+    });
+
     res.status(200).json({
       success: true,
-      count: logs.length,
+      count: transformedLogs.length,
       total: count,
       page: parseInt(page),
       pages: Math.ceil(count / parseInt(limit)),
-      data: logs,
+      data: transformedLogs,
     });
   } catch (error) {
     next(error);

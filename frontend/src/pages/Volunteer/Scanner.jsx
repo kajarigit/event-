@@ -25,7 +25,23 @@ export default function Scanner() {
 
   // Scan mutation
   const scanMutation = useMutation({
-    mutationFn: (qrToken) => volunteerApi.scanStudent(qrToken),
+    mutationFn: (scannedData) => {
+      // Extract token from scanned data
+      // QR might contain just the JWT token string, or JSON with token field
+      let qrToken;
+      
+      try {
+        // Try parsing as JSON first
+        const parsed = JSON.parse(scannedData);
+        qrToken = parsed.token || scannedData;
+      } catch {
+        // Not JSON, use as-is (it's the JWT token string)
+        qrToken = scannedData.trim();
+      }
+      
+      console.log('Sending QR token to backend:', qrToken);
+      return volunteerApi.scanStudent(qrToken);
+    },
     onSuccess: (response) => {
       const data = response.data?.data || response.data;
       const { action, student, attendance } = data;
@@ -41,6 +57,7 @@ export default function Scanner() {
     },
     onError: (error) => {
       const message = error.response?.data?.message || 'Scan failed';
+      console.error('Scan error:', error.response?.data);
       toast.error(message);
       setScanResult({ success: false, message });
       setTimeout(() => setScanResult(null), 5000);
@@ -108,7 +125,9 @@ export default function Scanner() {
       toast.error('Please enter QR data');
       return;
     }
-    scanMutation.mutate(manualInput);
+    
+    // Send the manual input (will be parsed by scanMutation)
+    scanMutation.mutate(manualInput.trim());
     setManualInput('');
   };
 
@@ -243,56 +262,65 @@ export default function Scanner() {
               <p className="text-sm">Start scanning student QR codes</p>
             </div>
           ) : (
-            recentScans.map((scan) => (
-              <div
-                key={scan.id}
-                className={`flex items-center justify-between p-3 rounded-lg ${
-                  scan.hasError
-                    ? 'bg-red-50 border border-red-200'
-                    : 'bg-gray-50 border border-gray-200'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <User className="w-8 h-8 text-gray-400" />
-                  <div>
-                    <p className="font-medium">{scan.studentId?.name || 'Unknown'}</p>
-                    <p className="text-sm text-gray-600">
-                      Roll: {scan.studentId?.rollNo || 'N/A'}
-                    </p>
-                    <p className="text-xs text-gray-500 flex items-center mt-1">
-                      <Clock className="w-3 h-3 mr-1" />
-                      {new Date(scan.scanTime).toLocaleString()}
-                    </p>
+            recentScans.map((scan) => {
+              // Handle both MongoDB and Sequelize response formats
+              const studentName = scan.studentId?.name || scan.user?.name || 'Unknown';
+              const rollNo = scan.studentId?.rollNo || scan.user?.rollNumber || 'N/A';
+              const scanAction = scan.action || (scan.scanType === 'check-in' ? 'in' : scan.scanType === 'check-out' ? 'out' : 'unknown');
+              const hasError = scan.hasError || scan.status === 'failed';
+              const errorMsg = scan.errorMessage || 'Scan failed';
+              
+              return (
+                <div
+                  key={scan.id}
+                  className={`flex items-center justify-between p-3 rounded-lg ${
+                    hasError
+                      ? 'bg-red-50 border border-red-200'
+                      : 'bg-gray-50 border border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-center space-x-3">
+                    <User className="w-8 h-8 text-gray-400" />
+                    <div>
+                      <p className="font-medium">{studentName}</p>
+                      <p className="text-sm text-gray-600">
+                        Roll: {rollNo}
+                      </p>
+                      <p className="text-xs text-gray-500 flex items-center mt-1">
+                        <Clock className="w-3 h-3 mr-1" />
+                        {new Date(scan.scanTime || scan.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end space-y-1">
+                    {hasError ? (
+                      <>
+                        <div className="flex items-center space-x-2">
+                          <XCircle className="w-5 h-5 text-red-600" />
+                          <span className="text-sm font-medium text-red-600">ERROR</span>
+                        </div>
+                        <p className="text-xs text-red-600">{errorMsg}</p>
+                      </>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle
+                          className={`w-5 h-5 ${
+                            scanAction === 'in' ? 'text-green-600' : 'text-blue-600'
+                          }`}
+                        />
+                        <span
+                          className={`text-sm font-medium ${
+                            scanAction === 'in' ? 'text-green-600' : 'text-blue-600'
+                          }`}
+                        >
+                          {scanAction.toUpperCase()}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end space-y-1">
-                  {scan.hasError ? (
-                    <>
-                      <div className="flex items-center space-x-2">
-                        <XCircle className="w-5 h-5 text-red-600" />
-                        <span className="text-sm font-medium text-red-600">ERROR</span>
-                      </div>
-                      <p className="text-xs text-red-600">{scan.errorMessage}</p>
-                    </>
-                  ) : (
-                    <div className="flex items-center space-x-2">
-                      <CheckCircle
-                        className={`w-5 h-5 ${
-                          scan.action === 'in' ? 'text-green-600' : 'text-blue-600'
-                        }`}
-                      />
-                      <span
-                        className={`text-sm font-medium ${
-                          scan.action === 'in' ? 'text-green-600' : 'text-blue-600'
-                        }`}
-                      >
-                        {scan.action.toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
