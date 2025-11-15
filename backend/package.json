@@ -23,8 +23,11 @@
   "author": "Sourav Mukhopadhyay",
   "license": "MIT",
   "dependencies": {
+    "@sentry/node": "^7.100.1",
     "bcryptjs": "^2.4.3",
+    "bull": "^4.12.0",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
@@ -35,15 +38,19 @@
     "mongoose": "^8.19.4",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
     "nodemailer": "^7.0.10",
     "papaparse": "^5.4.1",
     "pg": "^8.16.3",
+    "pm2": "^5.3.0",
     "qrcode": "^1.5.3",
+    "rate-limit-redis": "^4.2.0",
     "redis": "^4.6.11",
     "sequelize": "^6.37.7",
     "sequelize-cli": "^6.6.3",
     "uuid": "^9.0.1",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "winston-daily-rotate-file": "^4.7.1"
   },
   "devDependencies": {
     "@types/jest": "^29.5.10",

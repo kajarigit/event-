@@ -1,0 +1,61 @@
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test coverage
+coverage
+.nyc_output
+
+# Build artifacts
+dist
+build
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Database
+*.sqlite
+*.db
+
+# Uploads (keep structure but not files)
+uploads/*
+!uploads/.gitkeep
+
+# Backups
+backups/*
+!backups/.gitkeep
+
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose*.yml
+
+# Documentation (optional, remove if needed)
+*.md
+!README.md
