@@ -45,14 +45,28 @@ const verifyToken = (token, isRefresh = false) => {
  * @param {String} expiresIn - Expiry duration (e.g., '24h')
  */
 const generateQRToken = (payload, expiresIn = '24h') => {
+  const secret = process.env.QR_SECRET || process.env.JWT_SECRET;
+  
+  console.log('🔐 [JWT] Generating QR token:', {
+    hasQR_SECRET: !!process.env.QR_SECRET,
+    hasJWT_SECRET: !!process.env.JWT_SECRET,
+    usingSecret: process.env.QR_SECRET ? 'QR_SECRET' : 'JWT_SECRET',
+    secretLength: secret?.length,
+    payload: payload,
+    expiresIn
+  });
+  
   const token = jwt.sign(
     {
       ...payload,
       nonce: crypto.randomBytes(16).toString('hex'),
     },
-    process.env.QR_SECRET || process.env.JWT_SECRET,
+    secret,
     { expiresIn }
   );
+  
+  console.log('✅ [JWT] QR token generated, length:', token.length);
+  
   return token;
 };
 
@@ -61,15 +75,40 @@ const generateQRToken = (payload, expiresIn = '24h') => {
  */
 const verifyQRToken = (token) => {
   try {
-    return jwt.verify(
-      token,
-      process.env.QR_SECRET || process.env.JWT_SECRET
-    );
+    const secret = process.env.QR_SECRET || process.env.JWT_SECRET;
+    console.log('🔐 [JWT] Verifying QR token with secret:', {
+      hasQR_SECRET: !!process.env.QR_SECRET,
+      hasJWT_SECRET: !!process.env.JWT_SECRET,
+      usingSecret: process.env.QR_SECRET ? 'QR_SECRET' : 'JWT_SECRET',
+      secretLength: secret?.length,
+      tokenLength: token?.length
+    });
+    
+    const decoded = jwt.verify(token, secret);
+    
+    console.log('✅ [JWT] Token verified successfully:', {
+      type: decoded.type,
+      studentId: decoded.studentId,
+      eventId: decoded.eventId,
+      exp: new Date(decoded.exp * 1000).toISOString()
+    });
+    
+    return decoded;
   } catch (error) {
+    console.error('❌ [JWT] Token verification failed:', {
+      errorName: error.name,
+      errorMessage: error.message,
+      hasQR_SECRET: !!process.env.QR_SECRET,
+      hasJWT_SECRET: !!process.env.JWT_SECRET
+    });
+    
     if (error.name === 'TokenExpiredError') {
       throw new Error('QR code has expired');
     }
-    throw new Error('Invalid QR code');
+    if (error.name === 'JsonWebTokenError') {
+      throw new Error('Invalid QR code signature - ' + error.message);
+    }
+    throw new Error('Invalid QR code - ' + error.message);
   }
 };
 
