@@ -55,7 +55,9 @@ export default function StudentVoting() {
       return response.data?.data || response.data || {};
     },
     enabled: !!selectedEvent,
-    refetchInterval: 10000,
+    refetchInterval: 5000, // Refresh every 5 seconds (faster for better UX)
+    refetchOnWindowFocus: true, // Refresh when user returns to page
+    staleTime: 0, // Always consider data stale, fetch on mount
   });
 
   // Cast vote mutation

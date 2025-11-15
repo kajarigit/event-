@@ -60,7 +60,9 @@ export default function StudentFeedback() {
       return response.data?.data || response.data || {};
     },
     enabled: !!selectedEvent,
-    refetchInterval: 10000,
+    refetchInterval: 5000, // Refresh every 5 seconds
+    refetchOnWindowFocus: true, // Refresh when user returns to page
+    staleTime: 0, // Always fetch fresh data
   });
 
   // Submit feedback mutation

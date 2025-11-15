@@ -411,16 +411,19 @@ exports.getStatus = async (req, res, next) => {
     const { eventId } = req.params;
     const studentId = req.user.id;
 
-    // Check if student is currently checked in
-    const attendance = await Attendance.findOne({
+    // Get the LATEST attendance record for this student and event
+    const latestAttendance = await Attendance.findOne({
       where: {
         studentId: studentId,
         eventId,
-        checkOutTime: null, // Still checked in
       },
+      order: [['checkInTime', 'DESC']], // Get most recent
     });
 
-    const isCheckedIn = !!attendance;
+    // Student is checked in if:
+    // 1. They have an attendance record AND
+    // 2. The latest record has status 'checked-in' (checkOutTime is null)
+    const isCheckedIn = latestAttendance && latestAttendance.checkOutTime === null;
 
     // Get student's votes for this event
     const votes = await Vote.findAll({
