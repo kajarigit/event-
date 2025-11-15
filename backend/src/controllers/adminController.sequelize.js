@@ -1,6 +1,8 @@
 const { Event, Stall, User, Attendance, Feedback, Vote, ScanLog, sequelize } = require('../models/index.sequelize');
 const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
+const { generateRandomPassword } = require('../utils/passwordGenerator');
+const { sendWelcomeEmail } = require('../utils/emailService');
 const Papa = require('papaparse');
 const fs = require('fs').promises;
 const { Op } = require('sequelize');
@@ -466,16 +468,23 @@ exports.createUser = async (req, res, next) => {
       ...req.body,
     };
 
+    // Store plain password before hashing
+    const plainPassword = req.body.password;
+
     const user = await User.create(userData);
 
-    // Send credentials email
-    if (req.body.sendEmail && req.body.password) {
-      await sendCredentialsEmail(user.email, user.name, req.body.password);
+    // Send welcome email with credentials
+    try {
+      await sendWelcomeEmail(user, plainPassword, user.role);
+      console.log(`✅ Welcome email sent to ${user.email}`);
+    } catch (emailError) {
+      console.error(`❌ Failed to send welcome email to ${user.email}:`, emailError.message);
+      // Continue even if email fails
     }
 
     res.status(201).json({
       success: true,
-      message: 'User created successfully',
+      message: 'User created successfully. Welcome email has been sent.',
       data: user.toJSON(),
     });
   } catch (error) {
@@ -575,32 +584,38 @@ exports.bulkUploadUsers = async (req, res, next) => {
 
     const usersToCreate = [];
     const errors = [];
-    const credentialsToEmail = [];
+    const credentialsMap = new Map(); // Store email -> password mapping
 
     for (let i = 0; i < parsed.data.length; i++) {
       const row = parsed.data[i];
       try {
-        if (!row.name || !row.email || !row.password) {
-          errors.push({ row: i + 1, error: 'Name, email, and password are required' });
+        if (!row.name || !row.email) {
+          errors.push({ row: i + 1, error: 'Name and email are required' });
           continue;
         }
+
+        // Generate random password if not provided in CSV
+        const password = row.password || generateRandomPassword(10);
+        
+        // Store plain password for email
+        credentialsMap.set(row.email, {
+          email: row.email,
+          name: row.name,
+          password: password,
+          role: row.role || 'student',
+          rollNumber: row.rollNumber || row.rollNo || null,
+        });
 
         usersToCreate.push({
           name: row.name,
           email: row.email,
-          password: row.password,
+          password: password, // Will be hashed by model hook
           role: row.role || 'student',
           phone: row.phone || null,
           department: row.department || null,
           year: row.year || null,
           rollNumber: row.rollNumber || row.rollNo || null,
           isActive: row.isActive !== 'false',
-        });
-
-        credentialsToEmail.push({
-          email: row.email,
-          name: row.name,
-          password: row.password,
         });
       } catch (error) {
         errors.push({ row: i + 1, error: error.message });
@@ -612,15 +627,41 @@ exports.bulkUploadUsers = async (req, res, next) => {
       individualHooks: true, // This will trigger password hashing
     });
 
-    // Send bulk credentials emails
-    if (req.body.sendEmails) {
-      await sendBulkCredentialsEmails(credentialsToEmail);
+    // Send welcome emails to all created users
+    const emailResults = {
+      sent: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    for (const user of createdUsers) {
+      const credentials = credentialsMap.get(user.email);
+      if (credentials) {
+        try {
+          await sendWelcomeEmail(user, credentials.password, user.role);
+          emailResults.sent++;
+          console.log(`✅ Welcome email sent to ${user.email}`);
+        } catch (emailError) {
+          emailResults.failed++;
+          emailResults.errors.push({
+            email: user.email,
+            error: emailError.message,
+          });
+          console.error(`❌ Failed to send email to ${user.email}:`, emailError.message);
+        }
+      }
     }
 
     res.status(201).json({
       success: true,
-      message: `${createdUsers.length} users created successfully`,
-      data: { created: createdUsers.length, errors },
+      message: `${createdUsers.length} users created successfully. ${emailResults.sent} welcome emails sent.`,
+      data: {
+        created: createdUsers.length,
+        emailsSent: emailResults.sent,
+        emailsFailed: emailResults.failed,
+        uploadErrors: errors,
+        emailErrors: emailResults.errors,
+      },
     });
   } catch (error) {
     next(error);

@@ -4,6 +4,7 @@ import { ThemeProvider } from './context/ThemeContext';
 
 // Pages
 import Login from './pages/Login';
+import ForgotPassword from './pages/Auth/ForgotPassword';
 import StudentDashboard from './pages/Student/Dashboard';
 import VolunteerDashboard from './pages/Volunteer/Dashboard';
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -39,6 +40,7 @@ function App() {
     <ThemeProvider>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
+        <Route path="/forgot-password" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
         
         <Route
           path="/"

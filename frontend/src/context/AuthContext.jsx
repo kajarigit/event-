@@ -22,32 +22,49 @@ export const AuthProvider = ({ children }) => {
       const token = localStorage.getItem('accessToken');
       const refreshToken = localStorage.getItem('refreshToken');
       
-      if (token) {
+      console.log('🔍 AuthContext: Checking auth on mount...', { 
+        hasToken: !!token, 
+        hasRefreshToken: !!refreshToken 
+      });
+      
+      if (token && refreshToken) {
         try {
-          console.log('🔍 Checking auth on page load...');
+          console.log('🔍 Fetching /auth/me...');
           const response = await api.get('/auth/me');
           setUser(response.data.data);
-          console.log('✅ Auth restored:', response.data.data);
+          console.log('✅ Auth restored successfully:', response.data.data.email, response.data.data.role);
         } catch (error) {
-          console.log('⚠️ /auth/me failed:', error.response?.status, error.response?.data?.message);
+          console.error('❌ /auth/me failed:', {
+            status: error.response?.status,
+            message: error.response?.data?.message,
+            error: error.message
+          });
           
           // Only clear tokens if it's a 401/403 (unauthorized)
           // Don't clear on network errors (500, timeout, etc.)
           if (error.response?.status === 401 || error.response?.status === 403) {
-            console.log('🔐 Auth invalid, clearing tokens');
+            console.log('🔐 Unauthorized - clearing tokens');
             localStorage.removeItem('accessToken');
             localStorage.removeItem('refreshToken');
             setUser(null);
-          } else {
-            console.log('⚠️ Network/server error, keeping tokens for retry');
+          } else if (error.code === 'ERR_NETWORK' || !error.response) {
+            console.log('⚠️ Network error - will retry on next request');
             // Keep tokens but set user to null temporarily
+            setUser(null);
+          } else {
+            console.log('⚠️ Server error - clearing tokens');
+            localStorage.removeItem('accessToken');
+            localStorage.removeItem('refreshToken');
             setUser(null);
           }
         }
       } else {
-        console.log('ℹ️ No access token found in localStorage');
+        console.log('ℹ️ No tokens found in localStorage');
+        setUser(null);
       }
+      
       setIsLoading(false);
+      console.log('✅ Auth check complete');
     };
 
     checkAuth();

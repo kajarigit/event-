@@ -6,6 +6,7 @@ const Attendance = require('./Attendance.sequelize');
 const Feedback = require('./Feedback.sequelize');
 const Vote = require('./Vote.sequelize');
 const ScanLog = require('./ScanLog.sequelize');
+const OTP = require('./OTP.sequelize')(sequelize);
 
 // Define associations
 
@@ -29,6 +30,7 @@ User.hasMany(Attendance, { foreignKey: 'studentId', as: 'attendances' });
 User.hasMany(Feedback, { foreignKey: 'studentId', as: 'feedbacks' });
 User.hasMany(Vote, { foreignKey: 'studentId', as: 'votes' });
 User.hasMany(ScanLog, { foreignKey: 'userId', as: 'scanLogs' });
+User.hasMany(OTP, { foreignKey: 'userId', as: 'otps' });
 
 // Attendance associations
 Attendance.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
@@ -48,6 +50,9 @@ Vote.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 ScanLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 ScanLog.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
 ScanLog.belongsTo(Stall, { foreignKey: 'stallId', as: 'stall' });
+
+// OTP associations
+OTP.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 // Sync all models
 const syncModels = async () => {
@@ -73,5 +78,6 @@ module.exports = {
   Feedback,
   Vote,
   ScanLog,
+  OTP,
   syncModels
 };
