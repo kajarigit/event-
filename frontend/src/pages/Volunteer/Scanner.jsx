@@ -10,6 +10,7 @@ export default function Scanner() {
   const [scanning, setScanning] = useState(false);
   const [manualInput, setManualInput] = useState('');
   const [useManualMode, setUseManualMode] = useState(false);
+  const [lastTokenSent, setLastTokenSent] = useState(null); // NEW: Track last token sent
   const queryClient = useQueryClient();
 
   // Fetch recent scans
@@ -56,6 +57,15 @@ export default function Scanner() {
         originalLength: qrToken?.length,
         cleanedLength: cleanToken.length,
         preview: cleanToken.substring(0, 50) + '...'
+      });
+      
+      // Store for debugging display
+      setLastTokenSent({
+        raw: scannedData,
+        cleaned: cleanToken,
+        length: cleanToken.length,
+        preview: cleanToken.substring(0, 100) + '...' + cleanToken.substring(cleanToken.length - 50),
+        timestamp: new Date().toLocaleTimeString()
       });
       
       if (!cleanToken) {
@@ -264,6 +274,35 @@ export default function Scanner() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* DEBUG INFO - Last Token Sent */}
+        {lastTokenSent && (
+          <div className="bg-purple-50 border-2 border-purple-400 rounded-lg p-4 mb-4">
+            <h4 className="font-bold text-purple-900 mb-2 flex items-center gap-2">
+              🔍 Last Token Sent to Backend
+              <span className="text-xs font-normal text-purple-600">({lastTokenSent.timestamp})</span>
+            </h4>
+            <div className="space-y-2 text-sm">
+              <div className="bg-white p-2 rounded">
+                <p className="font-semibold text-gray-700">Token Length:</p>
+                <p className="font-mono text-lg text-green-600">{lastTokenSent.length} characters</p>
+              </div>
+              <div className="bg-white p-2 rounded">
+                <p className="font-semibold text-gray-700">Token Preview (start + end):</p>
+                <p className="font-mono text-xs text-gray-800 break-all">{lastTokenSent.preview}</p>
+              </div>
+              <div className="bg-white p-2 rounded">
+                <p className="font-semibold text-gray-700">Full Token:</p>
+                <textarea
+                  readOnly
+                  value={lastTokenSent.cleaned}
+                  className="w-full p-2 text-xs font-mono border border-gray-300 rounded"
+                  rows="3"
+                />
+              </div>
+            </div>
           </div>
         )}
 

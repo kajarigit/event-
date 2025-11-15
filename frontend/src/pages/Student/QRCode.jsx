@@ -166,6 +166,43 @@ export default function StudentQR() {
               <p className="mt-4 text-sm text-gray-600">
                 Show this QR code at the event gate
               </p>
+              
+              {/* ALWAYS VISIBLE DEBUG INFO */}
+              <div className="mt-4 w-full max-w-md bg-white p-3 rounded border-2 border-blue-400">
+                <p className="font-bold text-blue-900 mb-2">🔍 Token Data (for testing):</p>
+                <div className="space-y-2 text-xs">
+                  <div className="bg-gray-50 p-2 rounded">
+                    <p className="font-semibold text-gray-700">Token Length:</p>
+                    <p className="font-mono text-green-600 text-lg">{qr.token?.length || 0} characters</p>
+                  </div>
+                  <div className="bg-gray-50 p-2 rounded">
+                    <p className="font-semibold text-gray-700">Token Preview (first 80 chars):</p>
+                    <p className="font-mono text-gray-800 break-all">
+                      {qr.token?.substring(0, 80)}...
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 p-2 rounded">
+                    <p className="font-semibold text-gray-700">Token Preview (last 40 chars):</p>
+                    <p className="font-mono text-gray-800 break-all">
+                      ...{qr.token?.substring(qr.token.length - 40)}
+                    </p>
+                  </div>
+                  <div className="bg-yellow-50 p-3 rounded border border-yellow-300">
+                    <p className="font-semibold text-yellow-900 mb-2">📋 Full Token (click to copy):</p>
+                    <textarea
+                      readOnly
+                      value={qr.token}
+                      className="w-full p-2 text-xs font-mono bg-white border border-yellow-400 rounded cursor-pointer hover:bg-yellow-50"
+                      rows="4"
+                      onClick={(e) => {
+                        e.target.select();
+                        navigator.clipboard.writeText(qr.token);
+                        toast.success('✅ Token copied! Paste in volunteer scanner.');
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* QR Info */}
