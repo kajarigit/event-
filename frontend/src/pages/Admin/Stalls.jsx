@@ -23,9 +23,18 @@ export default function Stalls() {
     name: '',
     department: '',
     description: '',
-    coordinatorName: '',
-    coordinatorContact: '',
-    eventId: '', // Add eventId field
+    location: '',
+    category: '',
+    ownerName: '',
+    ownerContact: '',
+    ownerEmail: '',
+    participants: [],
+    eventId: '',
+  });
+  const [participantInput, setParticipantInput] = useState({
+    name: '',
+    regNo: '',
+    department: ''
   });
   const fileInputRef = useRef(null);
   const queryClient = useQueryClient();
@@ -114,10 +123,15 @@ export default function Stalls() {
       name: '',
       department: '',
       description: '',
-      coordinatorName: '',
-      coordinatorContact: '',
-      eventId: '', // Add eventId
+      location: '',
+      category: '',
+      ownerName: '',
+      ownerContact: '',
+      ownerEmail: '',
+      participants: [],
+      eventId: '',
     });
+    setParticipantInput({ name: '', regNo: '', department: '' });
     setShowModal(true);
   };
 
@@ -125,13 +139,17 @@ export default function Stalls() {
     setEditingStall(stall);
     setFormData({
       name: stall.name,
-      department: stall.department,
+      department: stall.department || '',
       description: stall.description || '',
-      // Map backend owner fields to frontend coordinator fields
-      coordinatorName: stall.ownerName || '',
-      coordinatorContact: stall.ownerContact || '',
-      eventId: stall.eventId?.id || stall.eventId || '', // Handle populated or ID
+      location: stall.location || '',
+      category: stall.category || '',
+      ownerName: stall.ownerName || '',
+      ownerContact: stall.ownerContact || '',
+      ownerEmail: stall.ownerEmail || '',
+      participants: stall.participants || [],
+      eventId: stall.eventId?.id || stall.eventId || '',
     });
+    setParticipantInput({ name: '', regNo: '', department: '' });
     setShowModal(true);
   };
 
@@ -142,23 +160,52 @@ export default function Stalls() {
       name: '',
       department: '',
       description: '',
-      coordinatorName: '',
-      coordinatorContact: '',
-      eventId: '', // Add eventId
+      location: '',
+      category: '',
+      ownerName: '',
+      ownerContact: '',
+      ownerEmail: '',
+      participants: [],
+      eventId: '',
     });
+    setParticipantInput({ name: '', regNo: '', department: '' });
+  };
+
+  const addParticipant = () => {
+    if (participantInput.name && participantInput.regNo && participantInput.department) {
+      setFormData({
+        ...formData,
+        participants: [...formData.participants, { ...participantInput }]
+      });
+      setParticipantInput({ name: '', regNo: '', department: '' });
+      toast.success('Participant added!');
+    } else {
+      toast.error('Please fill all participant fields');
+    }
+  };
+
+  const removeParticipant = (index) => {
+    setFormData({
+      ...formData,
+      participants: formData.participants.filter((_, i) => i !== index)
+    });
+    toast.success('Participant removed!');
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Map frontend field names to backend field names
     const stallData = {
       name: formData.name,
       department: formData.department,
       description: formData.description,
-      ownerName: formData.coordinatorName,       // Map to backend field
-      ownerContact: formData.coordinatorContact, // Map to backend field
-      eventId: formData.eventId,                 // Required field
+      location: formData.location,
+      category: formData.category,
+      ownerName: formData.ownerName,
+      ownerContact: formData.ownerContact,
+      ownerEmail: formData.ownerEmail,
+      participants: formData.participants,
+      eventId: formData.eventId,
     };
     
     if (editingStall) {
@@ -184,6 +231,39 @@ export default function Stalls() {
       bulkUploadMutation.mutate(file);
       e.target.value = '';
     }
+  };
+
+  // Download sample template
+  const downloadSampleTemplate = () => {
+    const csvContent = `eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,department,participants
+REPLACE_WITH_EVENT_UUID,AI & Machine Learning,Showcasing AI projects,Block A - Room 101,Technology,Dr. Rajesh Kumar,9876543210,rajesh.kumar@college.edu,Computer Science,"[{\\"name\\":\\"Amit Sharma\\",\\"regNo\\":\\"2024CS001\\",\\"department\\":\\"Computer Science\\"},{\\"name\\":\\"Priya Patel\\",\\"regNo\\":\\"2024CS045\\",\\"department\\":\\"Computer Science\\"}]"
+REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,Technology,Prof. Neha Singh,9876543211,neha.singh@college.edu,Electronics,"[{\\"name\\":\\"Vikram Reddy\\",\\"regNo\\":\\"2024EC012\\",\\"department\\":\\"Electronics\\"}]"`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'sample-stalls-upload.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Sample template downloaded! Replace REPLACE_WITH_EVENT_UUID with actual event ID. Participants should be JSON array.');
+  };
+
+  // Download blank template
+  const downloadBlankTemplate = () => {
+    const csvContent = 'eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,department,participants\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'blank-stalls-template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Blank template downloaded!');
   };
 
   const showQR = (stall) => {
@@ -226,6 +306,22 @@ export default function Stalls() {
             onChange={handleBulkUpload}
             className="hidden"
           />
+          <button
+            onClick={downloadSampleTemplate}
+            className="btn-secondary flex items-center space-x-2"
+            title="Download sample CSV with example stalls"
+          >
+            <Download className="w-5 h-5" />
+            <span>Sample Template</span>
+          </button>
+          <button
+            onClick={downloadBlankTemplate}
+            className="btn-secondary flex items-center space-x-2"
+            title="Download blank CSV template"
+          >
+            <Download className="w-5 h-5" />
+            <span>Blank Template</span>
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn-secondary flex items-center space-x-2"
@@ -276,12 +372,35 @@ export default function Stalls() {
                   <p className="text-sm text-gray-700 mb-3 line-clamp-2">{stall.description}</p>
                 )}
 
-                {stall.coordinatorName && (
-                  <div className="text-xs text-gray-600 mb-3">
-                    <div>Coordinator: {stall.coordinatorName}</div>
-                    {stall.coordinatorContact && <div>{stall.coordinatorContact}</div>}
-                  </div>
-                )}
+                <div className="text-xs text-gray-600 mb-3 space-y-1">
+                  {stall.location && <div>📍 {stall.location}</div>}
+                  {stall.category && <div>🏷️ {stall.category}</div>}
+                  {stall.ownerName && (
+                    <div>
+                      <span className="font-medium">Owner:</span> {stall.ownerName}
+                      {stall.ownerContact && <span> • {stall.ownerContact}</span>}
+                    </div>
+                  )}
+                  {stall.participants && stall.participants.length > 0 && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded">
+                      <div className="font-medium text-blue-900 mb-1">
+                        👥 Participants ({stall.participants.length})
+                      </div>
+                      <div className="space-y-1">
+                        {stall.participants.slice(0, 3).map((participant, idx) => (
+                          <div key={idx} className="text-xs text-blue-800">
+                            {participant.name} • {participant.regNo}
+                          </div>
+                        ))}
+                        {stall.participants.length > 3 && (
+                          <div className="text-xs text-blue-600 italic">
+                            +{stall.participants.length - 3} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-3 gap-2 text-center text-sm mb-3 p-2 bg-gray-50 rounded">
                   <div>
@@ -396,30 +515,139 @@ export default function Stalls() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Coordinator Name
+                    Location
                   </label>
                   <input
                     type="text"
-                    value={formData.coordinatorName}
-                    onChange={(e) => setFormData({ ...formData, coordinatorName: e.target.value })}
+                    value={formData.location}
+                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Block A - Room 101"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Category
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.category}
+                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="e.g., Technology, Engineering"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Owner Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.ownerName}
+                    onChange={(e) => setFormData({ ...formData, ownerName: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Coordinator Contact
+                    Owner Contact
                   </label>
                   <input
                     type="text"
-                    value={formData.coordinatorContact}
-                    onChange={(e) => setFormData({ ...formData, coordinatorContact: e.target.value })}
+                    value={formData.ownerContact}
+                    onChange={(e) => setFormData({ ...formData, ownerContact: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Owner Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.ownerEmail}
+                    onChange={(e) => setFormData({ ...formData, ownerEmail: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder="For QR code delivery"
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end space-x-3 pt-4">
+              {/* Participants Section */}
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Participants
+                </label>
+                
+                {/* Add Participant Form */}
+                <div className="bg-gray-50 p-4 rounded-lg mb-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                    <input
+                      type="text"
+                      value={participantInput.name}
+                      onChange={(e) => setParticipantInput({ ...participantInput, name: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Participant Name"
+                    />
+                    <input
+                      type="text"
+                      value={participantInput.regNo}
+                      onChange={(e) => setParticipantInput({ ...participantInput, regNo: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Reg No (e.g., 2024CS001)"
+                    />
+                    <input
+                      type="text"
+                      value={participantInput.department}
+                      onChange={(e) => setParticipantInput({ ...participantInput, department: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Department"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addParticipant}
+                    className="btn-secondary text-sm"
+                  >
+                    + Add Participant
+                  </button>
+                </div>
+
+                {/* Participants List */}
+                {formData.participants.length > 0 && (
+                  <div className="space-y-2">
+                    {formData.participants.map((participant, index) => (
+                      <div key={index} className="flex items-center justify-between bg-blue-50 p-3 rounded-lg">
+                        <div className="flex-1">
+                          <div className="font-medium text-gray-900">{participant.name}</div>
+                          <div className="text-sm text-gray-600">
+                            {participant.regNo} • {participant.department}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeParticipant(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                {formData.participants.length === 0 && (
+                  <p className="text-sm text-gray-500 italic">No participants added yet</p>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-4 border-t">
                 <button type="button" onClick={closeModal} className="btn-secondary">
                   Cancel
                 </button>

@@ -1,0 +1,21 @@
+name,email,password,role,phone,regNo,faculty,department,programme,year
+Rahul Kumar,rahul.kumar@student.com,Student@123,student,9876543210,2024CS001,School of Engineering,Computer Science,B.Tech Computer Science,2024
+Priya Sharma,priya.sharma@student.com,Student@123,student,9876543211,2024EC002,School of Engineering,Electronics,B.Tech Electronics,2024
+Amit Patel,amit.patel@student.com,Student@123,student,9876543212,2023ME045,School of Engineering,Mechanical,B.Tech Mechanical,2023
+Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,School of Engineering,Civil Engineering,B.Tech Civil,2024
+Vikram Singh,vikram.singh@student.com,Student@123,student,9876543214,2024CS020,School of Engineering,Computer Science,B.Tech Computer Science,2024
+Ananya Iyer,ananya.iyer@student.com,Student@123,student,9876543215,2024EC018,School of Engineering,Electronics,B.Tech Electronics,2024
+Karthik Menon,karthik.menon@student.com,Student@123,student,9876543216,2023CS078,School of Engineering,Computer Science,B.Tech Computer Science,2023
+Divya Nair,divya.nair@student.com,Student@123,student,9876543217,2024ME032,School of Engineering,Mechanical,B.Tech Mechanical,2024
+Rohan Gupta,rohan.gupta@student.com,Student@123,student,9876543218,2022CS156,School of Engineering,Computer Science,B.Tech Computer Science,2022
+Isha Desai,isha.desai@student.com,Student@123,student,9876543219,2024EC025,School of Engineering,Electronics,B.Tech Electronics,2024
+Arjun Pillai,arjun.pillai@student.com,Student@123,student,9876543220,2023CE089,School of Engineering,Civil Engineering,B.Tech Civil,2023
+Meera Joshi,meera.joshi@student.com,Student@123,student,9876543221,2024CS041,School of Engineering,Computer Science,B.Tech Computer Science,2024
+Siddharth Rao,siddharth.rao@student.com,Student@123,student,9876543222,2024ME011,School of Engineering,Mechanical,B.Tech Mechanical,2024
+Pooja Krishnan,pooja.krishnan@student.com,Student@123,student,9876543223,2023EC067,School of Engineering,Electronics,B.Tech Electronics,2023
+Aditya Verma,aditya.verma@student.com,Student@123,student,9876543224,2024CS055,School of Engineering,Computer Science,B.Tech Computer Science,2024
+Kavya Malhotra,kavya.malhotra@student.com,Student@123,student,9876543225,2022ME123,School of Engineering,Mechanical,B.Tech Mechanical,2022
+Nikhil Chopra,nikhil.chopra@student.com,Student@123,student,9876543226,2024CE022,School of Engineering,Civil Engineering,B.Tech Civil,2024
+Riya Kapoor,riya.kapoor@student.com,Student@123,student,9876543227,2024EC033,School of Engineering,Electronics,B.Tech Electronics,2024
+Manish Kumar,manish.kumar@student.com,Student@123,student,9876543228,2023CS092,School of Engineering,Computer Science,B.Tech Computer Science,2023
+Tanvi Shah,tanvi.shah@student.com,Student@123,student,9876543229,2024ME028,School of Engineering,Mechanical,B.Tech Mechanical,2024

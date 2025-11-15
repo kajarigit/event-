@@ -2,7 +2,8 @@ const { Event, Stall, User, Attendance, Feedback, Vote, ScanLog, sequelize } = r
 const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
 const { generateRandomPassword } = require('../utils/passwordGenerator');
-const { sendWelcomeEmail } = require('../utils/emailService');
+const { sendWelcomeEmail, sendStallQRCode } = require('../utils/emailService');
+const QRCode = require('qrcode');
 const Papa = require('papaparse');
 const fs = require('fs').promises;
 const { Op } = require('sequelize');
@@ -262,9 +263,36 @@ exports.createStall = async (req, res, next) => {
       await stall.save();
     }
 
+    // Send QR code email if ownerEmail is provided
+    if (stall.ownerEmail && stall.qrToken) {
+      try {
+        // Get event details
+        const event = await Event.findByPk(stall.eventId);
+        
+        // Generate QR code as data URL
+        const qrCodeDataURL = await QRCode.toDataURL(stall.qrToken, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+
+        // Send email with QR code
+        await sendStallQRCode(stall, qrCodeDataURL, event);
+        console.log(`✅ Stall QR email sent to ${stall.ownerEmail}`);
+      } catch (emailError) {
+        console.error(`❌ Failed to send stall QR email:`, emailError.message);
+        // Continue even if email fails
+      }
+    }
+
     res.status(201).json({
       success: true,
-      message: 'Stall created successfully',
+      message: stall.ownerEmail 
+        ? 'Stall created successfully. QR code has been sent to the owner\'s email.' 
+        : 'Stall created successfully.',
       data: stall,
     });
   } catch (error) {
@@ -404,6 +432,9 @@ exports.bulkUploadStalls = async (req, res, next) => {
           category: row.category || null,
           ownerName: row.ownerName || null,
           ownerContact: row.ownerContact || null,
+          ownerEmail: row.ownerEmail || null,
+          department: row.department || null,
+          participants: row.participants ? JSON.parse(row.participants) : [],
           isActive: row.isActive !== 'false',
         });
       } catch (error) {
@@ -413,16 +444,65 @@ exports.bulkUploadStalls = async (req, res, next) => {
 
     const createdStalls = await Stall.bulkCreate(stallsToCreate, { validate: true });
 
-    // Generate QR tokens for all stalls
+    // Track email results
+    const emailResults = {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+    };
+
+    // Generate QR tokens and send emails for all stalls
     for (const stall of createdStalls) {
+      // Generate QR token
       stall.qrToken = await generateStallQR(stall.id, stall.eventId);
       await stall.save();
+
+      // Send QR email if ownerEmail is provided
+      if (stall.ownerEmail) {
+        try {
+          // Get event details
+          const event = await Event.findByPk(stall.eventId);
+          
+          // Generate QR code as data URL
+          const qrCodeDataURL = await QRCode.toDataURL(stall.qrToken, {
+            width: 300,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+
+          // Send email
+          await sendStallQRCode(stall, qrCodeDataURL, event);
+          emailResults.sent++;
+          console.log(`✅ Stall QR email sent to ${stall.ownerEmail}`);
+        } catch (emailError) {
+          emailResults.failed++;
+          emailResults.errors.push({
+            stallName: stall.name,
+            email: stall.ownerEmail,
+            error: emailError.message,
+          });
+          console.error(`❌ Failed to send email for stall ${stall.name}:`, emailError.message);
+        }
+      } else {
+        emailResults.skipped++;
+      }
     }
 
     res.status(201).json({
       success: true,
-      message: `${createdStalls.length} stalls created successfully`,
-      data: { created: createdStalls.length, errors },
+      message: `${createdStalls.length} stalls created successfully. ${emailResults.sent} QR code emails sent.`,
+      data: {
+        created: createdStalls.length,
+        emailsSent: emailResults.sent,
+        emailsFailed: emailResults.failed,
+        emailsSkipped: emailResults.skipped,
+        uploadErrors: errors,
+        emailErrors: emailResults.errors,
+      },
     });
   } catch (error) {
     next(error);
@@ -603,7 +683,7 @@ exports.bulkUploadUsers = async (req, res, next) => {
           name: row.name,
           password: password,
           role: row.role || 'student',
-          rollNumber: row.rollNumber || row.rollNo || null,
+          regNo: row.regNo || null,
         });
 
         usersToCreate.push({
@@ -612,9 +692,11 @@ exports.bulkUploadUsers = async (req, res, next) => {
           password: password, // Will be hashed by model hook
           role: row.role || 'student',
           phone: row.phone || null,
+          regNo: row.regNo || null,
+          faculty: row.faculty || null,
           department: row.department || null,
+          programme: row.programme || null,
           year: row.year || null,
-          rollNumber: row.rollNumber || row.rollNo || null,
           isActive: row.isActive !== 'false',
         });
       } catch (error) {

@@ -1,0 +1,11 @@
+name,email,password,role,phone,regNo,faculty,department,programme
+Rajesh Kumar,rajesh.vol@event.com,Volunteer@123,volunteer,9876540001,VOL2024001,School of Engineering,Operations,Event Management
+Neha Sharma,neha.vol@event.com,Volunteer@123,volunteer,9876540002,VOL2024002,School of Engineering,Security,Event Management
+Arun Patel,arun.vol@event.com,Volunteer@123,volunteer,9876540003,VOL2024003,School of Engineering,Hospitality,Event Management
+Sneha Reddy,sneha.vol@event.com,Volunteer@123,volunteer,9876540004,VOL2024004,School of Engineering,Technical Support,Event Management
+Vikram Singh,vikram.vol@event.com,Volunteer@123,volunteer,9876540005,VOL2024005,School of Engineering,Registration,Event Management
+Priya Nair,priya.vol@event.com,Volunteer@123,volunteer,9876540006,VOL2024006,School of Engineering,Stage Management,Event Management
+Karthik Rao,karthik.vol@event.com,Volunteer@123,volunteer,9876540007,VOL2024007,School of Engineering,Crowd Control,Event Management
+Divya Iyer,divya.vol@event.com,Volunteer@123,volunteer,9876540008,VOL2024008,School of Engineering,First Aid,Event Management
+Rohan Gupta,rohan.vol@event.com,Volunteer@123,volunteer,9876540009,VOL2024009,School of Engineering,Catering,Event Management
+Meera Joshi,meera.vol@event.com,Volunteer@123,volunteer,9876540010,VOL2024010,School of Engineering,Photography,Event Management

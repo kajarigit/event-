@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../services/api';
 import toast from 'react-hot-toast';
-import { Plus, Edit2, Trash2, Upload, Users as UsersIcon, X, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, Upload, Users as UsersIcon, X, Search, Download } from 'lucide-react';
 
 export default function Users() {
   const [showModal, setShowModal] = useState(false);
@@ -12,13 +12,14 @@ export default function Users() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    rollNo: '',
-    programme: '',
+    regNo: '',
+    faculty: '',
     department: '',
+    programme: '',
+    year: '',
     role: 'student',
     password: '',
     phone: '',
-    assignedGate: '',
   });
   const fileInputRef = useRef(null);
   const queryClient = useQueryClient();
@@ -97,13 +98,14 @@ export default function Users() {
     setFormData({
       name: '',
       email: '',
-      rollNo: '',
-      programme: '',
+      regNo: '',
+      faculty: '',
       department: '',
+      programme: '',
+      year: '',
       role: 'student',
       password: '',
       phone: '',
-      assignedGate: '',
     });
     setShowModal(true);
   };
@@ -113,13 +115,14 @@ export default function Users() {
     setFormData({
       name: user.name,
       email: user.email,
-      rollNo: user.rollNo || '',
-      programme: user.programme || '',
+      regNo: user.regNo || '',
+      faculty: user.faculty || '',
       department: user.department || '',
+      programme: user.programme || '',
+      year: user.year || '',
       role: user.role,
       password: '',
       phone: user.phone || '',
-      assignedGate: user.assignedGate || '',
     });
     setShowModal(true);
   };
@@ -160,10 +163,45 @@ export default function Users() {
     }
   };
 
+  // Download sample template
+  const downloadSampleTemplate = () => {
+    const csvContent = `name,email,password,role,phone,regNo,faculty,department,programme,year
+Rahul Kumar,rahul.kumar@student.com,Student@123,student,9876543210,2024CS001,School of Engineering,Computer Science,B.Tech Computer Science,2024
+Priya Sharma,priya.sharma@student.com,Student@123,student,9876543211,2024EC002,School of Engineering,Electronics,B.Tech Electronics,2024
+Amit Patel,amit.patel@student.com,Student@123,student,9876543212,2023ME045,School of Engineering,Mechanical,B.Tech Mechanical,2023
+Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,School of Engineering,Civil Engineering,B.Tech Civil,2024`;
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'sample-students-upload.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Sample template downloaded!');
+  };
+
+  // Download blank template
+  const downloadBlankTemplate = () => {
+    const csvContent = 'name,email,password,role,phone,regNo,faculty,department,programme,year\n';
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'blank-students-template.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Blank template downloaded!');
+  };
+
   const filteredUsers = users.filter((user) =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (user.rollNo && user.rollNo.toLowerCase().includes(searchTerm.toLowerCase()))
+    (user.regNo && user.regNo.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -182,6 +220,22 @@ export default function Users() {
             onChange={handleBulkUpload}
             className="hidden"
           />
+          <button
+            onClick={downloadSampleTemplate}
+            className="btn-secondary flex items-center space-x-2"
+            title="Download sample CSV with example data"
+          >
+            <Download className="w-5 h-5" />
+            <span>Sample Template</span>
+          </button>
+          <button
+            onClick={downloadBlankTemplate}
+            className="btn-secondary flex items-center space-x-2"
+            title="Download blank CSV template"
+          >
+            <Download className="w-5 h-5" />
+            <span>Blank Template</span>
+          </button>
           <button
             onClick={() => fileInputRef.current?.click()}
             className="btn-secondary flex items-center space-x-2"
@@ -271,10 +325,11 @@ export default function Users() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-700">
-                      {user.rollNo && <div>Roll: {user.rollNo}</div>}
-                      {user.programme && <div>{user.programme}</div>}
-                      {user.department && <div>{user.department}</div>}
-                      {user.assignedGate && <div>Gate: {user.assignedGate}</div>}
+                      {user.regNo && <div className="font-medium">Reg: {user.regNo}</div>}
+                      {user.faculty && <div className="text-gray-600">{user.faculty}</div>}
+                      {user.programme && <div className="text-gray-600">{user.programme}</div>}
+                      {user.department && <div className="text-gray-600">{user.department}</div>}
+                      {user.year && <div className="text-gray-500">Year: {user.year}</div>}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end space-x-2">
@@ -366,12 +421,24 @@ export default function Users() {
                 {formData.role === 'student' && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Roll No</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Registration No</label>
                       <input
                         type="text"
-                        value={formData.rollNo}
-                        onChange={(e) => setFormData({ ...formData, rollNo: e.target.value })}
+                        value={formData.regNo}
+                        onChange={(e) => setFormData({ ...formData, regNo: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., 2024CS001"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Faculty/School</label>
+                      <input
+                        type="text"
+                        value={formData.faculty}
+                        onChange={(e) => setFormData({ ...formData, faculty: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., School of Engineering"
                       />
                     </div>
 
@@ -382,7 +449,18 @@ export default function Users() {
                         value={formData.programme}
                         onChange={(e) => setFormData({ ...formData, programme: e.target.value })}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g., BTech, MTech"
+                        placeholder="e.g., B.Tech Computer Science"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
+                      <input
+                        type="number"
+                        value={formData.year}
+                        onChange={(e) => setFormData({ ...formData, year: e.target.value })}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., 2024"
                       />
                     </div>
                   </>
@@ -395,7 +473,7 @@ export default function Users() {
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., CS, EC, ME"
+                    placeholder="e.g., Computer Science, Operations"
                   />
                 </div>
 
@@ -408,19 +486,6 @@ export default function Users() {
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-
-                {formData.role === 'volunteer' && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Assigned Gate</label>
-                    <input
-                      type="text"
-                      value={formData.assignedGate}
-                      onChange={(e) => setFormData({ ...formData, assignedGate: e.target.value })}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="e.g., Gate A, Gate B"
-                    />
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

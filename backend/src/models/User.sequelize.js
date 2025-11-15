@@ -33,16 +33,24 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  regNo: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  faculty: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   department: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  programme: {
     type: DataTypes.STRING,
     allowNull: true
   },
   year: {
     type: DataTypes.INTEGER,
-    allowNull: true
-  },
-  rollNumber: {
-    type: DataTypes.STRING,
     allowNull: true
   },
   isActive: {

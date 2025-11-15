@@ -49,6 +49,28 @@ const Stall = sequelize.define('Stall', {
     type: DataTypes.STRING,
     allowNull: true
   },
+  ownerEmail: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      isEmail: true
+    }
+  },
+  department: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  participants: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    get() {
+      const rawValue = this.getDataValue('participants');
+      return rawValue ? JSON.parse(rawValue) : [];
+    },
+    set(value) {
+      this.setDataValue('participants', JSON.stringify(value));
+    }
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true

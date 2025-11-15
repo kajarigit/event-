@@ -284,8 +284,173 @@ const sendNewPassword = async (email, newPassword, name = 'User') => {
   }
 };
 
+/**
+ * Send stall QR code email for feedback scanning
+ * @param {Object} stall - Stall object with name, ownerEmail, ownerName
+ * @param {string} qrCodeDataURL - QR code image as data URL
+ * @param {Object} event - Event object with name
+ */
+const sendStallQRCode = async (stall, qrCodeDataURL, event) => {
+  // Check if email is configured
+  if (!transporter) {
+    console.warn(`📧 Email not configured. Stall QR email not sent to ${stall.ownerEmail}`);
+    return { success: false, error: 'Email service not configured' };
+  }
+
+  const mailOptions = {
+    from: `"Event Management System" <${process.env.EMAIL_USER}>`,
+    to: stall.ownerEmail,
+    subject: `🎪 Your Stall QR Code - ${stall.name} | ${event.name}`,
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+          .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+          .stall-info { background: white; padding: 20px; border-left: 4px solid #f5576c; margin: 20px 0; border-radius: 5px; }
+          .info-item { margin: 10px 0; }
+          .info-label { font-weight: bold; color: #f5576c; }
+          .info-value { color: #333; }
+          .qr-container { text-align: center; background: white; padding: 30px; margin: 20px 0; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          .qr-code { max-width: 300px; width: 100%; height: auto; border: 5px solid #f5576c; border-radius: 10px; }
+          .instructions { background: #e3f2fd; border-left: 4px solid #2196f3; padding: 20px; margin: 20px 0; border-radius: 5px; }
+          .instruction-step { margin: 15px 0; padding-left: 25px; position: relative; }
+          .instruction-step:before { content: "✓"; position: absolute; left: 0; color: #2196f3; font-weight: bold; font-size: 18px; }
+          .warning { background: #fff3cd; border-left: 4px solid #ffc107; padding: 15px; margin: 20px 0; border-radius: 5px; }
+          .footer { text-align: center; color: #666; font-size: 12px; margin-top: 20px; }
+          .highlight { background: #fff9c4; padding: 2px 6px; border-radius: 3px; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>🎪 Your Stall QR Code</h1>
+            <p style="margin: 10px 0 0 0; font-size: 18px;">Ready for Feedback Collection!</p>
+          </div>
+          
+          <div class="content">
+            <p>Hello <strong>${stall.ownerName || 'Stall Owner'}</strong>,</p>
+            
+            <p>Your stall has been successfully registered! Below is your unique QR code for collecting student feedback.</p>
+            
+            <div class="stall-info">
+              <h3 style="margin-top: 0; color: #f5576c;">📋 Stall Information</h3>
+              <div class="info-item">
+                <span class="info-label">Stall Name:</span>
+                <span class="info-value">${stall.name}</span>
+              </div>
+              ${stall.department ? `
+              <div class="info-item">
+                <span class="info-label">Department:</span>
+                <span class="info-value">${stall.department}</span>
+              </div>
+              ` : ''}
+              ${stall.location ? `
+              <div class="info-item">
+                <span class="info-label">Location:</span>
+                <span class="info-value">${stall.location}</span>
+              </div>
+              ` : ''}
+              ${stall.category ? `
+              <div class="info-item">
+                <span class="info-label">Category:</span>
+                <span class="info-value">${stall.category}</span>
+              </div>
+              ` : ''}
+              <div class="info-item">
+                <span class="info-label">Event:</span>
+                <span class="info-value">${event.name}</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">Contact:</span>
+                <span class="info-value">${stall.ownerContact || 'N/A'}</span>
+              </div>
+            </div>
+            
+            <div class="qr-container">
+              <h3 style="margin-top: 0; color: #f5576c;">📱 Your Feedback QR Code</h3>
+              <img src="${qrCodeDataURL}" alt="Stall QR Code" class="qr-code" />
+              <p style="margin: 15px 0 0 0; color: #666; font-size: 14px;">
+                Students scan this to provide feedback and vote for your stall
+              </p>
+            </div>
+            
+            <div class="instructions">
+              <h3 style="margin-top: 0; color: #2196f3;">📖 How to Use Your QR Code</h3>
+              
+              <div class="instruction-step">
+                <strong>Print this QR code</strong> and display it prominently at your stall
+              </div>
+              
+              <div class="instruction-step">
+                <strong>Ask students to scan</strong> the QR code with their phones after visiting
+              </div>
+              
+              <div class="instruction-step">
+                Students can <strong>vote and give feedback</strong> for your stall
+              </div>
+              
+              <div class="instruction-step">
+                <strong>Track your votes</strong> in real-time through the admin dashboard
+              </div>
+              
+              <div class="instruction-step">
+                <strong>Collect valuable feedback</strong> to improve your stall
+              </div>
+            </div>
+            
+            <div class="warning">
+              <strong>⚠️ Important Tips:</strong>
+              <ul style="margin: 10px 0 0 0; padding-left: 20px;">
+                <li>Keep this email safe - you can reprint the QR code anytime</li>
+                <li>Display the QR code where students can easily see it</li>
+                <li>Students must be <span class="highlight">checked in</span> to the event to vote</li>
+                <li>Each student can vote once per stall</li>
+                <li>Voting and feedback are anonymous</li>
+              </ul>
+            </div>
+            
+            <h3 style="color: #f5576c;">🏆 Compete for Top Stall!</h3>
+            <p>
+              The stalls with the most votes will be featured on the leaderboard. 
+              Encourage students to visit and vote for your stall!
+            </p>
+            
+            <p style="margin-top: 30px;">
+              If you have any questions or need a replacement QR code, please contact the event administrator.
+            </p>
+            
+            <p>Good luck with your stall! 🎉</p>
+            
+            <p>Best regards,<br><strong>Event Management Team</strong></p>
+          </div>
+          
+          <div class="footer">
+            <p>This is an automated email. Please do not reply to this message.</p>
+            <p>&copy; ${new Date().getFullYear()} Event Management System. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  try {
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Stall QR email sent to ${stall.ownerEmail}:`, info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    console.error(`❌ Failed to send stall QR email to ${stall.ownerEmail}:`, error.message);
+    return { success: false, error: error.message };
+  }
+};
+
 module.exports = {
   sendWelcomeEmail,
   sendPasswordResetOTP,
   sendNewPassword,
+  sendStallQRCode,
 };
