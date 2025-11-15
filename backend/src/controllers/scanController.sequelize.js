@@ -14,27 +14,72 @@ exports.scanStudent = async (req, res, next) => {
     const { qrToken } = req.body;
     const volunteerId = req.user.id;
 
-    // Validate QR token exists
-    if (!qrToken) {
+    console.log('🔍 [SCAN] Request received:', { 
+      hasQrToken: !!qrToken, 
+      qrTokenType: typeof qrToken,
+      tokenLength: qrToken?.length,
+      tokenStart: qrToken?.substring(0, 20) + '...',
+      volunteerId,
+      volunteerIdType: typeof volunteerId
+    });
+
+    // VALIDATION 1: QR token must exist
+    if (!qrToken || typeof qrToken !== 'string') {
       await transaction.rollback();
+      console.error('❌ [SCAN] No QR token provided');
       return res.status(400).json({
         success: false,
-        message: 'QR token is required',
+        message: 'QR token is required and must be a string',
       });
     }
 
-    // Verify QR token
+    // VALIDATION 2: Clean and normalize the token
+    const cleanToken = qrToken.trim();
+    
+    if (!cleanToken) {
+      await transaction.rollback();
+      console.error('❌ [SCAN] Empty QR token after trimming');
+      return res.status(400).json({
+        success: false,
+        message: 'QR token cannot be empty',
+      });
+    }
+
+    console.log('✅ [SCAN] Token cleaned, length:', cleanToken.length);
+
+    // VALIDATION 3: Verify and decode JWT token
     let decoded;
     try {
-      decoded = verifyQRToken(qrToken);
+      decoded = verifyQRToken(cleanToken);
+      console.log('✅ [SCAN] Token decoded:', {
+        studentId: decoded.studentId,
+        studentIdType: typeof decoded.studentId,
+        eventId: decoded.eventId,
+        eventIdType: typeof decoded.eventId,
+        type: decoded.type,
+        hasNonce: !!decoded.nonce,
+        iat: decoded.iat,
+        exp: decoded.exp
+      });
     } catch (error) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Token verification failed:', {
+        error: error.message,
+        name: error.name
+      });
       
-      // Handle expired QR codes
-      if (error.message.includes('expired')) {
+      // Handle specific JWT errors
+      if (error.name === 'TokenExpiredError' || error.message.includes('expired')) {
         return res.status(400).json({
           success: false,
           message: 'QR code has expired. Please generate a new one.',
+        });
+      }
+      
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid QR code format. Please generate a new one.',
         });
       }
       
@@ -44,80 +89,138 @@ exports.scanStudent = async (req, res, next) => {
       });
     }
 
-    // Validate token type
+    // VALIDATION 4: Check token type
     if (decoded.type !== 'student') {
       await transaction.rollback();
+      console.error('❌ [SCAN] Invalid token type:', decoded.type);
       return res.status(400).json({
         success: false,
-        message: 'Invalid QR code type. This is not a student QR code.',
+        message: `Invalid QR code type "${decoded.type}". Expected "student" QR code.`,
       });
     }
 
-    const { studentId, eventId } = decoded;
+    // VALIDATION 5: Extract and normalize IDs
+    const studentId = String(decoded.studentId).trim();
+    const eventId = String(decoded.eventId).trim();
 
-    // Validate student exists and is active
+    if (!studentId || !eventId) {
+      await transaction.rollback();
+      console.error('❌ [SCAN] Missing IDs in token:', { studentId, eventId });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid QR code: missing student or event information',
+      });
+    }
+
+    console.log('🔍 [SCAN] Looking up student:', {
+      studentId,
+      studentIdLength: studentId.length
+    });
+
+    // VALIDATION 6: Verify student exists
     const student = await User.findByPk(studentId, { transaction });
+    
     if (!student) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Student not found:', studentId);
       return res.status(404).json({
         success: false,
-        message: 'Student not found in the system',
+        message: 'Student not found in the system. Please contact admin.',
       });
     }
 
+    console.log('✅ [SCAN] Student found:', { 
+      id: student.id, 
+      name: student.name, 
+      role: student.role,
+      isActive: student.isActive
+    });
+
+    // VALIDATION 7: Check student is active
     if (!student.isActive) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Student account inactive:', student.id);
       return res.status(403).json({
         success: false,
         message: 'Student account is inactive. Please contact admin.',
       });
     }
 
+    // VALIDATION 8: Verify student role
     if (student.role !== 'student') {
       await transaction.rollback();
+      console.error('❌ [SCAN] User is not a student:', {
+        userId: student.id,
+        role: student.role
+      });
       return res.status(403).json({
         success: false,
-        message: 'This QR code does not belong to a student',
+        message: `This QR code belongs to a ${student.role}, not a student`,
       });
     }
 
-    // Validate event exists and is active
+    console.log('🔍 [SCAN] Looking up event:', eventId);
+
+    // VALIDATION 9: Verify event exists
     const event = await Event.findByPk(eventId, { transaction });
+    
     if (!event) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Event not found:', eventId);
       return res.status(404).json({
         success: false,
         message: 'Event not found',
       });
     }
 
+    console.log('✅ [SCAN] Event found:', {
+      id: event.id,
+      name: event.name,
+      isActive: event.isActive
+    });
+
+    // VALIDATION 10: Check event is active
     if (!event.isActive) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Event inactive:', event.id);
       return res.status(403).json({
         success: false,
         message: 'This event is no longer active',
       });
     }
 
-    // Check if event has ended
-    if (event.endDate && new Date() > new Date(event.endDate)) {
+    // VALIDATION 11: Check event dates
+    const now = new Date();
+    
+    if (event.endDate && now > new Date(event.endDate)) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Event ended:', {
+        eventId: event.id,
+        endDate: event.endDate,
+        now
+      });
       return res.status(403).json({
         success: false,
         message: 'This event has already ended',
       });
     }
 
-    // Check if event hasn't started yet
-    if (event.startDate && new Date() < new Date(event.startDate)) {
+    if (event.startDate && now < new Date(event.startDate)) {
       await transaction.rollback();
+      console.error('❌ [SCAN] Event not started:', {
+        eventId: event.id,
+        startDate: event.startDate,
+        now
+      });
       return res.status(403).json({
         success: false,
         message: 'This event has not started yet',
       });
     }
 
-    // Check current attendance status
+    // VALIDATION 12: Check current attendance status
+    console.log('🔍 [SCAN] Checking attendance status...');
+    
     const currentAttendance = await Attendance.findOne({
       where: {
         studentId,
@@ -130,8 +233,10 @@ exports.scanStudent = async (req, res, next) => {
     let action, attendance;
 
     if (!currentAttendance) {
-      // CHECK IN
-      // Prevent duplicate check-ins (check for recent check-out)
+      // ========== CHECK IN ==========
+      console.log('📥 [SCAN] Processing CHECK-IN...');
+      
+      // Prevent rapid re-check-in after check-out
       const recentCheckout = await Attendance.findOne({
         where: {
           studentId,
@@ -146,6 +251,9 @@ exports.scanStudent = async (req, res, next) => {
 
       if (recentCheckout) {
         await transaction.rollback();
+        console.error('❌ [SCAN] Recent checkout detected:', {
+          checkOutTime: recentCheckout.checkOutTime
+        });
         return res.status(400).json({
           success: false,
           message: 'You just checked out. Please wait a minute before checking in again.',
@@ -161,15 +269,26 @@ exports.scanStudent = async (req, res, next) => {
         },
         { transaction }
       );
+      
       action = 'in';
+      console.log('✅ [SCAN] CHECK-IN successful:', attendance.id);
+      
     } else {
-      // CHECK OUT
-      // Prevent immediate re-checkout
-      if (currentAttendance.checkInTime > new Date(Date.now() - 30000)) {
+      // ========== CHECK OUT ==========
+      console.log('📤 [SCAN] Processing CHECK-OUT...');
+      
+      // Prevent immediate re-checkout (must wait 30 seconds)
+      const timeSinceCheckIn = Date.now() - new Date(currentAttendance.checkInTime).getTime();
+      
+      if (timeSinceCheckIn < 30000) {
         await transaction.rollback();
+        console.error('❌ [SCAN] Too soon for checkout:', {
+          checkInTime: currentAttendance.checkInTime,
+          timeSinceCheckIn: `${Math.floor(timeSinceCheckIn / 1000)}s`
+        });
         return res.status(400).json({
           success: false,
-          message: 'You just checked in. Please wait at least 30 seconds before checking out.',
+          message: `You just checked in ${Math.floor(timeSinceCheckIn / 1000)} seconds ago. Please wait at least 30 seconds before checking out.`,
         });
       }
 
@@ -180,12 +299,14 @@ exports.scanStudent = async (req, res, next) => {
         },
         { transaction }
       );
+      
       attendance = currentAttendance;
       action = 'out';
+      console.log('✅ [SCAN] CHECK-OUT successful:', attendance.id);
     }
 
     // Create scan log
-    await ScanLog.create(
+    const scanLog = await ScanLog.create(
       {
         userId: volunteerId,
         eventId,
@@ -196,7 +317,10 @@ exports.scanStudent = async (req, res, next) => {
       { transaction }
     );
 
+    console.log('✅ [SCAN] Scan log created:', scanLog.id);
+
     await transaction.commit();
+    console.log('✅ [SCAN] Transaction committed successfully');
 
     res.status(200).json({
       success: true,
@@ -208,16 +332,27 @@ exports.scanStudent = async (req, res, next) => {
           name: student.name,
           rollNumber: student.rollNumber,
           department: student.department,
+          programme: student.programme,
         },
         event: {
           id: event.id,
           name: event.name,
         },
-        attendance,
+        attendance: {
+          id: attendance.id,
+          checkInTime: attendance.checkInTime,
+          checkOutTime: attendance.checkOutTime,
+          status: attendance.status,
+        },
+        timestamp: new Date(),
       },
     });
   } catch (error) {
     await transaction.rollback();
+    console.error('❌ [SCAN] Unexpected error:', {
+      error: error.message,
+      stack: error.stack
+    });
     next(error);
   }
 };

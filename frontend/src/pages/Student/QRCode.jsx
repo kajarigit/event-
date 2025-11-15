@@ -38,13 +38,22 @@ export default function StudentQR() {
   });
 
   // Fetch QR code
-  const { data: qrData, isLoading, refetch } = useQuery({
+  const { data: qrData, isLoading, refetch, error } = useQuery({
     queryKey: ['student-qr', selectedEvent],
     queryFn: async () => {
+      console.log('[QR] Fetching QR code for event:', selectedEvent);
       const response = await studentApi.getQRCode(selectedEvent);
-      return response.data?.data || response.data || {};
+      const data = response.data?.data || response.data || {};
+      console.log('[QR] Received QR data:', {
+        hasToken: !!data.token,
+        tokenLength: data.token?.length,
+        tokenPreview: data.token?.substring(0, 30) + '...',
+        expiresAt: data.expiresAt
+      });
+      return data;
     },
     enabled: !!selectedEvent,
+    retry: 2,
   });
 
   useEffect(() => {
@@ -165,8 +174,41 @@ export default function StudentQR() {
               <div className="space-y-1 text-sm text-blue-800">
                 <p><strong>Valid until:</strong> {new Date(qr.expiresAt).toLocaleString()}</p>
                 <p><strong>Usage:</strong> Check-in/Check-out at event gates</p>
+                <p><strong>Token Length:</strong> {qr.token?.length} characters</p>
               </div>
             </div>
+
+            {/* Debug Section for Testing */}
+            <details className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <summary className="font-semibold text-gray-700 cursor-pointer">
+                🔧 Debug Info (for testing)
+              </summary>
+              <div className="mt-3 space-y-2 text-xs">
+                <div className="bg-white p-2 rounded border">
+                  <p className="font-mono text-gray-600 mb-1">Token Preview:</p>
+                  <p className="font-mono break-all text-gray-800">
+                    {qr.token?.substring(0, 100)}...
+                  </p>
+                </div>
+                <div className="bg-yellow-50 p-2 rounded border border-yellow-200">
+                  <p className="font-semibold text-yellow-800 mb-1">For Manual Testing:</p>
+                  <p className="text-yellow-700">
+                    Copy the full token below and paste it in the volunteer scanner's "Manual Input" mode
+                  </p>
+                  <textarea
+                    readOnly
+                    value={qr.token}
+                    className="w-full mt-2 p-2 text-xs font-mono bg-white border border-yellow-300 rounded"
+                    rows="3"
+                    onClick={(e) => {
+                      e.target.select();
+                      navigator.clipboard.writeText(qr.token);
+                      toast.success('Token copied to clipboard!');
+                    }}
+                  />
+                </div>
+              </div>
+            </details>
 
             {/* Actions */}
             <div className="flex gap-3">

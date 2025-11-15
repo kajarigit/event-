@@ -26,29 +26,54 @@ export default function Scanner() {
   // Scan mutation
   const scanMutation = useMutation({
     mutationFn: (scannedData) => {
-      // Extract token from scanned data
-      // QR might contain just the JWT token string, or JSON with token field
+      // Extract and clean token from scanned data
+      // QR might contain:
+      // 1. Just the JWT token string: "eyJhbGc..."
+      // 2. JSON with token field: {"token":"eyJhbGc...", "studentId":"...", ...}
       let qrToken;
       
+      console.log('[SCANNER] Raw scanned data:', {
+        type: typeof scannedData,
+        length: scannedData?.length,
+        preview: scannedData?.substring(0, 50)
+      });
+      
       try {
-        // Try parsing as JSON first
+        // Attempt to parse as JSON
         const parsed = JSON.parse(scannedData);
-        qrToken = parsed.token || scannedData;
+        console.log('[SCANNER] Parsed as JSON:', Object.keys(parsed));
+        qrToken = parsed.token || parsed.qrToken || scannedData;
       } catch {
-        // Not JSON, use as-is (it's the JWT token string)
-        qrToken = scannedData.trim();
+        // Not JSON - treat as raw token string
+        console.log('[SCANNER] Not JSON, using as raw token');
+        qrToken = scannedData;
       }
       
-      console.log('Sending QR token to backend:', qrToken);
-      return volunteerApi.scanStudent(qrToken);
+      // Clean the token (remove whitespace, newlines, etc.)
+      const cleanToken = String(qrToken).trim().replace(/[\r\n\t]/g, '');
+      
+      console.log('[SCANNER] Sending to backend:', {
+        originalLength: qrToken?.length,
+        cleanedLength: cleanToken.length,
+        preview: cleanToken.substring(0, 50) + '...'
+      });
+      
+      if (!cleanToken) {
+        throw new Error('QR token is empty after cleaning');
+      }
+      
+      return volunteerApi.scanStudent(cleanToken);
     },
     onSuccess: (response) => {
+      console.log('[SCANNER] Success response:', response.data);
       const data = response.data?.data || response.data;
       const { action, student, attendance } = data;
+      
       toast.success(
         `${student.name} checked ${action.toUpperCase()} successfully!`,
         { duration: 4000 }
       );
+      
       setScanResult({ success: true, action, student, attendance });
       queryClient.invalidateQueries(['recentScans']);
       
@@ -56,9 +81,14 @@ export default function Scanner() {
       setTimeout(() => setScanResult(null), 5000);
     },
     onError: (error) => {
-      const message = error.response?.data?.message || 'Scan failed';
-      console.error('Scan error:', error.response?.data);
-      toast.error(message);
+      console.error('[SCANNER] Error:', {
+        response: error.response?.data,
+        message: error.message,
+        status: error.response?.status
+      });
+      
+      const message = error.response?.data?.message || error.message || 'Scan failed';
+      toast.error(message, { duration: 5000 });
       setScanResult({ success: false, message });
       setTimeout(() => setScanResult(null), 5000);
     },

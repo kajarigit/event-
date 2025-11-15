@@ -81,6 +81,13 @@ exports.getQRCode = async (req, res, next) => {
     const { eventId } = req.params;
     const studentId = req.user.id;
 
+    console.log('🎫 Generating QR:', { 
+      studentId, 
+      studentIdType: typeof studentId,
+      eventId,
+      eventIdType: typeof eventId
+    });
+
     // Check if event exists and is active
     const event = await Event.findByPk(eventId);
     if (!event) {
@@ -99,6 +106,13 @@ exports.getQRCode = async (req, res, next) => {
 
     // Generate QR code
     const qrData = await generateStudentQR(studentId, eventId);
+    
+    console.log('✅ QR Generated:', {
+      hasToken: !!qrData.token,
+      tokenLength: qrData.token?.length,
+      tokenPreview: qrData.token?.substring(0, 50) + '...',
+      expiresAt: qrData.expiresAt
+    });
 
     res.status(200).json({
       success: true,
@@ -106,6 +120,7 @@ exports.getQRCode = async (req, res, next) => {
       data: qrData,
     });
   } catch (error) {
+    console.error('❌ QR Generation Error:', error);
     next(error);
   }
 };

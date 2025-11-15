@@ -101,10 +101,21 @@ const generateQRCodeImage = async (data, options = {}) => {
  * Generate student QR token with embedded data
  */
 const generateStudentQR = async (studentId, eventId) => {
+  // Ensure IDs are strings (important for UUIDs)
+  const studentIdStr = String(studentId);
+  const eventIdStr = String(eventId);
+  
+  console.log('📝 generateStudentQR called:', {
+    studentId: studentIdStr,
+    eventId: eventIdStr,
+    studentIdType: typeof studentIdStr,
+    eventIdType: typeof eventIdStr
+  });
+
   const token = generateQRToken(
     {
-      studentId,
-      eventId,
+      studentId: studentIdStr,
+      eventId: eventIdStr,
       type: 'student',
     },
     process.env.QR_TOKEN_EXPIRY || '24h'
