@@ -175,9 +175,3 @@ exports.cleanupExpiredOTPs = async (req, res, next) => {
     next(error);
   }
 };
-
-module.exports = {
-  forgotPassword,
-  verifyOTPAndResetPassword,
-  cleanupExpiredOTPs,
-};
