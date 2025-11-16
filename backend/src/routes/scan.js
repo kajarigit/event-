@@ -42,6 +42,14 @@ router.get(
   scanController.getScanLogs
 );
 
+// Get volunteer's recent scans
+router.get(
+  '/my-recent',
+  protect,
+  authorize('volunteer', 'admin'),
+  scanController.getMyRecentScans
+);
+
 router.get(
   '/logs/:id',
   protect,

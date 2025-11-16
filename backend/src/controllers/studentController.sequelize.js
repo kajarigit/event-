@@ -377,7 +377,7 @@ exports.getMyFeedbacks = async (req, res, next) => {
 exports.getAttendance = async (req, res, next) => {
   try {
     const studentId = req.user.id;
-    const { eventId } = req.params; // Changed from req.query to req.params
+    const { eventId } = req.params;
 
     const where = { studentId };
     if (eventId) {
@@ -396,10 +396,33 @@ exports.getAttendance = async (req, res, next) => {
       order: [['checkInTime', 'DESC']],
     });
 
+    // Format the response with proper status and timestamps
+    const formattedAttendances = attendances.map(att => ({
+      id: att.id,
+      eventId: att.eventId,
+      event: att.event,
+      status: att.checkOutTime ? 'checked-out' : 'checked-in', // Fix: Calculate actual status
+      checkInTime: att.checkInTime,
+      checkOutTime: att.checkOutTime,
+      inTimestamp: att.checkInTime,  // For frontend compatibility
+      outTimestamp: att.checkOutTime, // For frontend compatibility
+      durationSeconds: att.checkOutTime 
+        ? Math.floor((new Date(att.checkOutTime) - new Date(att.checkInTime)) / 1000)
+        : null,
+    }));
+
+    // Calculate total duration for completed sessions
+    const totalDurationSeconds = formattedAttendances
+      .filter(att => att.durationSeconds)
+      .reduce((sum, att) => sum + att.durationSeconds, 0);
+
     res.status(200).json({
       success: true,
-      count: attendances.length,
-      data: attendances,
+      count: formattedAttendances.length,
+      data: {
+        attendances: formattedAttendances,
+        totalDurationSeconds,
+      },
     });
   } catch (error) {
     next(error);

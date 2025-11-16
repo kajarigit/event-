@@ -694,3 +694,62 @@ exports.flagScanError = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Get volunteer's recent scans (last 20 scans they performed)
+ * @route   GET /api/scan/my-recent
+ * @access  Private (Volunteer, Admin)
+ */
+exports.getMyRecentScans = async (req, res, next) => {
+  try {
+    const volunteerId = req.user.id;
+    const limit = parseInt(req.query.limit) || 20;
+
+    // Get recent scans performed by this volunteer
+    const logs = await ScanLog.findAll({
+      where: { 
+        scannedBy: volunteerId,
+        scanType: { [Op.in]: ['check-in', 'check-out'] } // Only gate scans
+      },
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email', 'rollNumber', 'department'],
+        },
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name'],
+        },
+      ],
+      order: [['scanTime', 'DESC']],
+      limit,
+    });
+
+    // Format response for frontend
+    const formattedLogs = logs.map(log => ({
+      id: log.id,
+      scanType: log.scanType,
+      scanTime: log.scanTime,
+      status: log.status,
+      gate: log.gate || 'Gate 1',
+      student: {
+        name: log.user?.name || 'Unknown',
+        rollNumber: log.user?.rollNumber || 'N/A',
+        department: log.user?.department || 'N/A',
+      },
+      event: {
+        name: log.event?.name || 'N/A',
+      },
+    }));
+
+    res.status(200).json({
+      success: true,
+      count: formattedLogs.length,
+      data: formattedLogs,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

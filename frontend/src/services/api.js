@@ -104,6 +104,11 @@ export const volunteerApi = {
   flagScanError: (id, data) => api.put(`/scan/logs/${id}/flag`, data),
 };
 
+// Scan API (shared)
+export const scanApi = {
+  getMyRecentScans: (params) => api.get('/scan/my-recent', { params }),
+};
+
 // Admin API
 export const adminApi = {
   // Events
