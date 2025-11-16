@@ -213,24 +213,43 @@ exports.toggleEventActive = async (req, res, next) => {
  */
 exports.getStalls = async (req, res, next) => {
   try {
-    const { eventId, isActive, limit = 50, page = 1 } = req.query;
+    const { eventId, isActive, department, limit = 50, page = 1 } = req.query;
     const where = {};
     if (eventId) where.eventId = eventId;
     if (isActive !== undefined) where.isActive = isActive === 'true';
+    if (department) where.department = department;
 
-    const { count, rows: stalls } = await Stall.findAndCountAll({
-      where,
-      include: [
-        {
-          model: Event,
-          as: 'event',
-          attributes: ['id', 'name'],
-        },
-      ],
-      order: [['name', 'ASC']],
-      limit: parseInt(limit),
-      offset: (parseInt(page) - 1) * parseInt(limit),
-    });
+    // Try to fetch stalls with event association, fallback to simple query if association fails
+    let stalls, count;
+    try {
+      const result = await Stall.findAndCountAll({
+        where,
+        include: [
+          {
+            model: Event,
+            as: 'event',
+            attributes: ['id', 'name'],
+            required: false,
+          },
+        ],
+        order: [['name', 'ASC']],
+        limit: parseInt(limit),
+        offset: (parseInt(page) - 1) * parseInt(limit),
+      });
+      stalls = result.rows;
+      count = result.count;
+    } catch (includeError) {
+      // Fallback to simple query without associations
+      console.warn('Association error, falling back to simple query:', includeError.message);
+      const result = await Stall.findAndCountAll({
+        where,
+        order: [['name', 'ASC']],
+        limit: parseInt(limit),
+        offset: (parseInt(page) - 1) * parseInt(limit),
+      });
+      stalls = result.rows;
+      count = result.count;
+    }
 
     res.status(200).json({
       success: true,
@@ -241,6 +260,7 @@ exports.getStalls = async (req, res, next) => {
       data: stalls,
     });
   } catch (error) {
+    console.error('Error fetching stalls:', error);
     next(error);
   }
 };
@@ -280,7 +300,10 @@ exports.createStall = async (req, res, next) => {
 
     // Generate QR token with actual stall ID
     if (stall.eventId) {
-      stall.qrToken = await generateStallQR(stall.id, stall.eventId);
+      const qrResult = await generateStallQR(stall.id, stall.eventId);
+      // generateStallQR returns { token, qrData, qrImage }
+      // Save only the token string to database
+      stall.qrToken = qrResult.token;
       await stall.save();
     }
 
@@ -405,7 +428,10 @@ exports.getStallQRCode = async (req, res, next) => {
     }
 
     // Generate or regenerate QR token
-    const qrToken = await generateStallQR(stall.id, stall.eventId);
+    const qrResult = await generateStallQR(stall.id, stall.eventId);
+    // generateStallQR returns { token, qrData, qrImage }
+    // Save only the token string to database
+    const qrToken = qrResult.token;
     
     await stall.update({ qrToken });
 
@@ -476,7 +502,10 @@ exports.bulkUploadStalls = async (req, res, next) => {
     // Generate QR tokens and send emails for all stalls
     for (const stall of createdStalls) {
       // Generate QR token
-      stall.qrToken = await generateStallQR(stall.id, stall.eventId);
+      const qrResult = await generateStallQR(stall.id, stall.eventId);
+      // generateStallQR returns { token, qrData, qrImage }
+      // Save only the token string to database
+      stall.qrToken = qrResult.token;
       await stall.save();
 
       // Send QR email if ownerEmail is provided
