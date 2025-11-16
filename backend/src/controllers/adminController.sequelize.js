@@ -3,6 +3,7 @@ const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
 const { generateRandomPassword } = require('../utils/passwordGenerator');
 const { sendWelcomeEmail, sendStallQRCode } = require('../utils/emailService');
+const { normalizeDepartment, normalizeString, normalizeEmail } = require('../utils/normalization');
 const QRCode = require('qrcode');
 const Papa = require('papaparse');
 const fs = require('fs').promises;
@@ -426,14 +427,14 @@ exports.bulkUploadStalls = async (req, res, next) => {
 
         stallsToCreate.push({
           eventId: row.eventId,
-          name: row.name,
-          description: row.description || null,
-          location: row.location || null,
-          category: row.category || null,
-          ownerName: row.ownerName || null,
-          ownerContact: row.ownerContact || null,
-          ownerEmail: row.ownerEmail || null,
-          department: row.department || null,
+          name: normalizeString(row.name),
+          description: normalizeString(row.description) || null,
+          location: normalizeString(row.location) || null,
+          category: normalizeString(row.category) || null,
+          ownerName: normalizeString(row.ownerName) || null,
+          ownerContact: normalizeString(row.ownerContact) || null,
+          ownerEmail: normalizeEmail(row.ownerEmail) || null,
+          department: normalizeDepartment(row.department), // Normalize department
           participants: row.participants ? JSON.parse(row.participants) : [],
           isActive: row.isActive !== 'false',
         });
@@ -679,23 +680,23 @@ exports.bulkUploadUsers = async (req, res, next) => {
         
         // Store plain password for email
         credentialsMap.set(row.email, {
-          email: row.email,
-          name: row.name,
+          email: normalizeEmail(row.email),
+          name: normalizeString(row.name),
           password: password,
           role: row.role || 'student',
-          regNo: row.regNo || null,
+          regNo: normalizeString(row.regNo) || null,
         });
 
         usersToCreate.push({
-          name: row.name,
-          email: row.email,
+          name: normalizeString(row.name),
+          email: normalizeEmail(row.email),
           password: password, // Will be hashed by model hook
           role: row.role || 'student',
-          phone: row.phone || null,
-          regNo: row.regNo || null,
-          faculty: row.faculty || null,
-          department: row.department || null,
-          programme: row.programme || null,
+          phone: normalizeString(row.phone) || null,
+          regNo: normalizeString(row.regNo) || null,
+          faculty: normalizeString(row.faculty) || null,
+          department: normalizeDepartment(row.department), // Normalize department
+          programme: normalizeString(row.programme) || null,
           year: row.year || null,
           isActive: row.isActive !== 'false',
         });

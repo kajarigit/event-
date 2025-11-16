@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Plus, Edit2, Trash2, Upload, Users as UsersIcon, X, Search, Download } from 'lucide-react';
+import { DEPARTMENTS } from '../../constants/departments';
 
 export default function Users() {
   const [showModal, setShowModal] = useState(false);
@@ -468,13 +469,18 @@ Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,Sch
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    placeholder="e.g., Computer Science, Operations"
-                  />
+                  >
+                    <option value="">Select Department</option>
+                    {DEPARTMENTS.map((dept) => (
+                      <option key={dept} value={dept}>
+                        {dept}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
