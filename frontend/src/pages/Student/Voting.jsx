@@ -1,13 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentApi } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import toast from 'react-hot-toast';
-import { Trophy, Award, Medal, Star, CheckCircle, AlertCircle } from 'lucide-react';
+import { Trophy, Award, Medal, Star, CheckCircle, AlertCircle, Filter } from 'lucide-react';
 
 export default function StudentVoting() {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [selectedStalls, setSelectedStalls] = useState({ 1: '', 2: '', 3: '' });
+  const [departmentFilter, setDepartmentFilter] = useState('all');
+  const [searchFilter, setSearchFilter] = useState('');
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
   // Fetch events (active or all)
   const { data: events = [] } = useQuery({
@@ -144,8 +148,31 @@ export default function StudentVoting() {
       .filter(([rank, stallId]) => rank != currentRank && stallId)
       .map(([_, stallId]) => stallId);
 
-    return stalls.filter((stall) => !votedStallIds.includes(stall.id));
+    let availableStalls = stalls.filter((stall) => !votedStallIds.includes(stall.id));
+
+    // Apply department filter
+    if (departmentFilter === 'my-department' && user?.department) {
+      availableStalls = availableStalls.filter(stall => stall.department === user.department);
+    } else if (departmentFilter !== 'all') {
+      availableStalls = availableStalls.filter(stall => stall.department === departmentFilter);
+    }
+
+    // Apply search filter
+    if (searchFilter.trim()) {
+      const search = searchFilter.toLowerCase();
+      availableStalls = availableStalls.filter(stall =>
+        stall.name?.toLowerCase().includes(search) ||
+        stall.description?.toLowerCase().includes(search) ||
+        stall.category?.toLowerCase().includes(search) ||
+        stall.department?.toLowerCase().includes(search)
+      );
+    }
+
+    return availableStalls;
   };
+
+  // Get unique departments from stalls for filter
+  const departments = [...new Set(stalls.map(stall => stall.department).filter(Boolean))].sort();
 
   return (
     <div className="space-y-6">
@@ -176,6 +203,48 @@ export default function StudentVoting() {
 
       {selectedEvent && (
         <>
+          {/* Filters */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-4">
+              <Filter className="w-5 h-5 text-gray-600" />
+              <h3 className="font-semibold text-gray-900">Filter Stalls</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Department
+                </label>
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => setDepartmentFilter(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Departments</option>
+                  {user?.department && (
+                    <option value="my-department">My Department ({user.department})</option>
+                  )}
+                  {departments.map((dept) => (
+                    <option key={dept} value={dept}>
+                      {dept}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Search
+                </label>
+                <input
+                  type="text"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Search by name, category..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+          </div>
+
           {/* Check-in Status Warning */}
           {!status?.isCheckedIn && (
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start space-x-3">

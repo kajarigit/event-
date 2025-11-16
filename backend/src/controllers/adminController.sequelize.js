@@ -247,18 +247,38 @@ exports.getStalls = async (req, res, next) => {
 
 exports.createStall = async (req, res, next) => {
   try {
-    const stallData = {
-      ...req.body,
-    };
+    // Extract only valid stall fields from request body
+    const {
+      eventId,
+      name,
+      description,
+      location,
+      category,
+      ownerName,
+      ownerContact,
+      ownerEmail,
+      department,
+      participants,
+      isActive
+    } = req.body;
 
-    // Generate QR token
-    if (stallData.eventId) {
-      stallData.qrToken = await generateStallQR('temp', stallData.eventId);
-    }
+    const stallData = {
+      eventId,
+      name,
+      description: description || null,
+      location: location || null,
+      category: category || null,
+      ownerName: ownerName || null,
+      ownerContact: ownerContact || null,
+      ownerEmail: ownerEmail || null,
+      department: department || null,
+      participants: participants || [],
+      isActive: isActive !== undefined ? isActive : true,
+    };
 
     const stall = await Stall.create(stallData);
 
-    // Update QR token with actual stall ID
+    // Generate QR token with actual stall ID
     if (stall.eventId) {
       stall.qrToken = await generateStallQR(stall.id, stall.eventId);
       await stall.save();
