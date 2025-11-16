@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { volunteerApi } from '../../services/api';
 import toast from 'react-hot-toast';
 
-export default function Scanner() {
+export default function Scanner({ onScanSuccess }) {
   const [scanResult, setScanResult] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [manualInput, setManualInput] = useState('');
@@ -85,7 +85,14 @@ export default function Scanner() {
       );
       
       setScanResult({ success: true, action, student, attendance });
+      
+      // Invalidate recent scans query to trigger refetch
       queryClient.invalidateQueries(['recentScans']);
+      
+      // Call parent callback if provided (for Dashboard to refetch)
+      if (onScanSuccess) {
+        onScanSuccess();
+      }
       
       // Clear result after 5 seconds
       setTimeout(() => setScanResult(null), 5000);

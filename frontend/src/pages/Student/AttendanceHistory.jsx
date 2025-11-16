@@ -17,13 +17,17 @@ export default function AttendanceHistory() {
 
   // Fetch attendance history
   const { data: attendanceData, isLoading } = useQuery({
-    queryKey: ['attendance', selectedEvent],
+    queryKey: ['attendance-history', selectedEvent],
     queryFn: async () => {
       if (!selectedEvent) return [];
       const response = await studentApi.getAttendance(selectedEvent);
-      return response.data?.data || response.data || [];
+      // Handle new backend format: { data: { attendances: [...], totalDurationSeconds: N } }
+      const data = response.data?.data || response.data;
+      return data?.attendances || data || [];
     },
     enabled: !!selectedEvent,
+    refetchInterval: 30000, // Refresh every 30 seconds
+    refetchOnWindowFocus: true,
   });
 
   const formatDuration = (checkIn, checkOut) => {
