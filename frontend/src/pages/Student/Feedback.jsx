@@ -17,8 +17,9 @@ export default function StudentFeedback() {
   const [scanValidation, setScanValidation] = useState(null); // { status: 'valid'|'invalid', message: '', details: '' }
   const [isCameraLoading, setIsCameraLoading] = useState(false);
   const queryClient = useQueryClient();
-  const scannerRef = useRef(null);
-  const isCleaningUpRef = useRef(false); // Prevent multiple cleanup calls
+  const scannerInstanceRef = useRef(null); // Raw scanner instance
+  const isInitializingRef = useRef(false); // Prevent double init
+  const containerMountedRef = useRef(false); // Track if container exists
 
   // Fetch events (active or all)
   const { data: events = [] } = useQuery({
@@ -181,8 +182,6 @@ export default function StudentFeedback() {
       }
 
       // SUCCESS! Set scanned stall and close scanner
-      console.log('[Feedback QR] ✅ Scan successful! Stall:', stall.name);
-      
       setScanValidation({
         status: 'valid',
         message: '✅ Valid Stall QR Code',
@@ -191,25 +190,10 @@ export default function StudentFeedback() {
       });
       
       // Close and clean up scanner
-      const qrScanner = scannerRef.current;
-      if (qrScanner) {
-        console.log('[Feedback QR] Stopping scanner after successful scan...');
-        scannerRef.current = null;
-        setScanner(null);
-        
-        // Stop scanner async
-        setTimeout(async () => {
-          try {
-            await qrScanner.stop();
-            console.log('[Feedback QR] ✅ Scanner stopped after successful scan');
-          } catch (err) {
-            console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
-          }
-        }, 0);
-      }
+      console.log('[Feedback QR] ✅ Scan successful! Stall:', stall.name);
       
       setScannedStall(stall);
-      setShowScanner(false);
+      setShowScanner(false); // This will trigger cleanup
       setIsProcessingScan(false);
       
       toast.success(`✅ Scanned: ${stall.name}! Now give your feedback.`, {
@@ -238,159 +222,102 @@ export default function StudentFeedback() {
     }
   }, []);
 
-  // Initialize QR Scanner
+  // Initialize QR Scanner - Completely isolated from React
   useEffect(() => {
     if (!showScanner) {
-      return; // Don't do anything if scanner not shown
-    }
-
-    // Prevent multiple initializations
-    if (scannerRef.current) {
-      console.log('[Feedback QR] Scanner already initialized, skipping');
+      // Clean up when scanner is closed
+      if (scannerInstanceRef.current) {
+        console.log('[Feedback QR] Closing scanner');
+        const instance = scannerInstanceRef.current;
+        scannerInstanceRef.current = null;
+        containerMountedRef.current = false;
+        
+        // Async cleanup
+        Promise.resolve().then(() => {
+          return instance.stop();
+        }).catch(() => {
+          console.log('[Feedback QR] Scanner already stopped');
+        });
+      }
       return;
     }
 
-    let isActive = true;
-    let qrScanner = null;
+    // Don't initialize if already initializing or initialized
+    if (isInitializingRef.current || scannerInstanceRef.current) {
+      console.log('[Feedback QR] Scanner already exists, skipping init');
+      return;
+    }
 
+    isInitializingRef.current = true;
+    
     const initScanner = async () => {
-      setIsCameraLoading(true);
       try {
-        console.log('[Feedback QR] 🚀 Starting scanner initialization...');
+        setIsCameraLoading(true);
+        console.log('[Feedback QR] 🚀 Initializing scanner...');
         
-        // Wait for DOM element to be ready
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Wait for DOM
+        await new Promise(resolve => setTimeout(resolve, 600));
         
-        // Check if still active and element exists
-        if (!isActive) {
-          console.log('[Feedback QR] Component unmounted, aborting init');
-          return;
-        }
-
         const element = document.getElementById('qr-scanner');
         if (!element) {
-          throw new Error('Scanner element not found in DOM');
+          throw new Error('Scanner container not found');
         }
-
-        console.log('[Feedback QR] ✅ Scanner element found');
         
-        // Create scanner instance
-        qrScanner = new Html5Qrcode('qr-scanner');
-        scannerRef.current = qrScanner;
-        console.log('[Feedback QR] ✅ Html5Qrcode instance created');
+        containerMountedRef.current = true;
+        console.log('[Feedback QR] Creating scanner instance');
         
-        toast.loading('Requesting camera access...', { id: 'camera-init' });
+        // Create instance
+        const instance = new Html5Qrcode('qr-scanner');
         
-          // Get cameras
+        // Get cameras
         const cameras = await Html5Qrcode.getCameras();
-        console.log('[Feedback QR] ✅ Cameras found:', cameras.length);
-        
         if (!cameras || cameras.length === 0) {
-          throw new Error('No cameras found on this device');
+          throw new Error('No cameras found');
         }
-
-        // Select camera (prefer back/environment camera)
-        const backCamera = cameras.find(camera => 
-          camera.label.toLowerCase().includes('back') || 
-          camera.label.toLowerCase().includes('rear') ||
-          camera.label.toLowerCase().includes('environment')
+        
+        console.log('[Feedback QR] ✅ Found', cameras.length, 'camera(s)');
+        
+        // Select camera
+        const backCamera = cameras.find(cam => 
+          cam.label.toLowerCase().includes('back') || 
+          cam.label.toLowerCase().includes('environment')
+        );
+        const cameraId = backCamera?.id || cameras[0].id;
+        
+        // Start scanner
+        await instance.start(
+          cameraId,
+          {
+            fps: 10,
+            qrbox: (width, height) => {
+              const size = Math.min(width, height) * 0.7;
+              return { width: size, height: size };
+            }
+          },
+          handleScan,
+          handleScanError
         );
         
-        const selectedCameraId = backCamera?.id || cameras[0].id;
-        console.log('[Feedback QR] 📸 Using camera:', cameras.find(c => c.id === selectedCameraId)?.label);
-        
-        // Configure scanner
-        const config = {
-          fps: 10,
-          qrbox: function(viewfinderWidth, viewfinderHeight) {
-            const qrboxSize = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7);
-            return { width: qrboxSize, height: qrboxSize };
-          },
-          aspectRatio: 1.0,
-          disableFlip: false,
-          videoConstraints: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
-          }
-        };
-        
-        console.log('[Feedback QR] 🎬 Starting camera...');
-        toast.loading('Starting camera...', { id: 'camera-init' });
-        
-        // Start scanning
-        await qrScanner.start(selectedCameraId, config, handleScan, handleScanError);
-        
-        if (!isActive) {
-          console.log('[Feedback QR] Component unmounted during init');
-          qrScanner.stop().catch(() => {});
-          scannerRef.current = null;
-          return;
-        }
-        
-        setScanner(qrScanner);
+        console.log('[Feedback QR] ✅ Scanner started!');
+        scannerInstanceRef.current = instance;
+        setScanner(instance);
         setIsCameraLoading(false);
-        console.log('[Feedback QR] ✅✅✅ Scanner started successfully!');
-        toast.success('📸 Camera ready! Point at stall QR code', { 
-          id: 'camera-init',
-          duration: 3000
-        });
+        toast.success('📸 Camera ready!', { id: 'camera-init', duration: 2000 });
         
       } catch (error) {
-        console.error('[Feedback QR] ❌ Failed to initialize scanner:', error);
-        
-        if (!isActive) return;
-        
+        console.error('[Feedback QR] Init error:', error);
         setIsCameraLoading(false);
-        toast.dismiss('camera-init');
-        
-        let userMessage = 'Camera error: ' + error.message;
-        
-        if (error.name === 'NotAllowedError') {
-          userMessage = '🚫 Camera permission denied. Please allow camera access in your browser settings.';
-        } else if (error.name === 'NotFoundError') {
-          userMessage = '📷 No camera found on this device.';
-        } else if (error.name === 'NotReadableError') {
-          userMessage = '⚠️ Camera is already in use by another application.';
-        }
-        
-        toast.error(userMessage, { duration: 8000 });
+        toast.error('Camera error: ' + error.message, { duration: 5000 });
         setShowScanner(false);
-        
-        // Clean up on error
-        if (qrScanner) {
-          scannerRef.current = null;
-        }
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
     initScanner();
-
-    return () => {
-      isActive = false;
-      console.log('[Feedback QR] 🧹 Cleanup triggered');
-      // Scanner cleanup will be handled when showScanner becomes false
-    };
+    
+    // No cleanup in this effect - handled by showScanner change
   }, [showScanner, handleScan, handleScanError]);
-
-  // Separate effect to handle cleanup when scanner is closed
-  useEffect(() => {
-    return () => {
-      // This runs when component unmounts or showScanner changes to false
-      if (scannerRef.current && !showScanner) {
-        console.log('[Feedback QR] Cleaning up scanner');
-        const scanner = scannerRef.current;
-        scannerRef.current = null;
-        
-        // Clean up async without blocking
-        setTimeout(() => {
-          scanner.stop().catch(() => {
-            console.log('[Feedback QR] Scanner already stopped');
-          });
-        }, 0);
-      }
-    };
-  }, [showScanner]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -418,30 +345,12 @@ export default function StudentFeedback() {
     });
   };
 
-  const cancelScan = async () => {
-    console.log('[Feedback QR] Cancel scan requested');
+  const cancelScan = () => {
+    console.log('[Feedback QR] Cancel requested');
     setIsProcessingScan(false);
     setScanValidation(null);
     setIsCameraLoading(false);
-    
-    const qrScanner = scannerRef.current;
-    if (qrScanner) {
-      console.log('[Feedback QR] Stopping scanner...');
-      scannerRef.current = null;
-      setScanner(null);
-      
-      // Stop scanner async to not block UI
-      setTimeout(async () => {
-        try {
-          await qrScanner.stop();
-          console.log('[Feedback QR] ✅ Scanner stopped successfully');
-        } catch (err) {
-          console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
-        }
-      }, 0);
-    }
-    
-    setShowScanner(false);
+    setShowScanner(false); // This will trigger cleanup in useEffect
   };
 
   return (
