@@ -1150,3 +1150,78 @@ exports.deleteAttendance = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Refresh all stall statistics
+ * @route   POST /api/admin/stalls/refresh-stats
+ * @access  Private (Admin)
+ */
+exports.refreshAllStallStats = async (req, res, next) => {
+  try {
+    const { sequelize } = require('../config/database');
+    
+    console.log('[Admin] Refreshing all stall stats...');
+    
+    // Get all stalls
+    const stalls = await Stall.findAll();
+    console.log(`[Admin] Found ${stalls.length} stalls to update`);
+    
+    let updatedCount = 0;
+    
+    // Update each stall's stats
+    for (const stall of stalls) {
+      // Calculate feedback stats using Sequelize aggregation
+      const feedbackStats = await Feedback.findAll({
+        where: { stallId: stall.id },
+        attributes: [
+          [sequelize.fn('COUNT', sequelize.col('id')), 'totalFeedbacks'],
+          [sequelize.fn('AVG', sequelize.col('rating')), 'averageRating'],
+        ],
+        raw: true,
+      });
+      
+      if (feedbackStats.length > 0 && feedbackStats[0].totalFeedbacks > 0) {
+        const totalFeedbacks = parseInt(feedbackStats[0].totalFeedbacks);
+        const averageRating = parseFloat(feedbackStats[0].averageRating);
+        
+        // Update stall stats
+        await stall.update({
+          stats: {
+            ...stall.stats,
+            totalFeedbacks: totalFeedbacks,
+            averageRating: Math.round(averageRating * 10) / 10,
+          },
+        });
+        
+        updatedCount++;
+        console.log(`[Admin] Updated ${stall.name}: ${totalFeedbacks} feedbacks, ${Math.round(averageRating * 10) / 10} avg rating`);
+      } else {
+        // Reset to 0 if no feedbacks
+        if (stall.stats?.totalFeedbacks !== 0 || stall.stats?.averageRating !== 0) {
+          await stall.update({
+            stats: {
+              ...stall.stats,
+              totalFeedbacks: 0,
+              averageRating: 0,
+            },
+          });
+          console.log(`[Admin] Reset ${stall.name}: 0 feedbacks`);
+        }
+      }
+    }
+    
+    console.log(`[Admin] Stats refresh complete. Updated ${updatedCount} stalls.`);
+    
+    res.status(200).json({
+      success: true,
+      message: `Successfully refreshed stats for ${updatedCount} stalls`,
+      data: {
+        totalStalls: stalls.length,
+        updatedStalls: updatedCount,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Error refreshing stall stats:', error);
+    next(error);
+  }
+};
