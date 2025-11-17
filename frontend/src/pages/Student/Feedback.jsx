@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Star, Send, CheckCircle, AlertCircle, MessageSquare, Camera, X, Scan } from 'lucide-react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 export default function StudentFeedback() {
   const [selectedEvent, setSelectedEvent] = useState('');
@@ -143,7 +143,13 @@ export default function StudentFeedback() {
       
       // Close and clean up scanner
       if (scanner) {
-        await scanner.clear().catch(console.error);
+        try {
+          await scanner.stop();
+          await scanner.clear();
+          console.log('[Feedback QR] Scanner stopped after successful scan');
+        } catch (err) {
+          console.log('[Feedback QR] Error stopping scanner:', err.message);
+        }
         setScanner(null);
       }
       
@@ -180,7 +186,7 @@ export default function StudentFeedback() {
       if (showScanner && !scanner && isActive) {
         try {
           // Wait for DOM element to be ready
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise(resolve => setTimeout(resolve, 200));
           
           // Check if element exists
           const element = document.getElementById('qr-scanner');
@@ -191,33 +197,55 @@ export default function StudentFeedback() {
             return;
           }
 
-          console.log('[Feedback QR] Initializing scanner with mobile-optimized settings...');
+          console.log('[Feedback QR] Initializing Html5Qrcode scanner...');
           
-          qrScanner = new Html5QrcodeScanner(
-            'qr-scanner',
-            { 
-              fps: 10, 
-              qrbox: 250,
-              aspectRatio: 1.777778,
-              rememberLastUsedCamera: true,
-              showTorchButtonIfSupported: true,
-              showZoomSliderIfSupported: true,
-              defaultZoomValueIfSupported: 2,
-              supportedScanTypes: [0, 1],
-            },
-            false
-          );
-
-          console.log('[Feedback QR] Scanner initialized, starting render...');
-          qrScanner.render(handleScan, handleScanError);
+          // Use Html5Qrcode directly for better control
+          qrScanner = new Html5Qrcode('qr-scanner');
           
-          if (isActive) {
-            setScanner(qrScanner);
-            console.log('[Feedback QR] ✅ Scanner ready! Waiting for QR code scan...');
+          console.log('[Feedback QR] Scanner created, requesting camera permissions...');
+          
+          // Get cameras
+          const cameras = await Html5Qrcode.getCameras();
+          console.log('[Feedback QR] Available cameras:', cameras.length);
+          
+          if (cameras && cameras.length > 0) {
+            const cameraId = cameras[cameras.length - 1].id; // Use back camera if available
+            console.log('[Feedback QR] Starting camera:', cameraId);
+            
+            // Start scanning
+            await qrScanner.start(
+              cameraId,
+              {
+                fps: 10,
+                qrbox: { width: 250, height: 250 },
+                aspectRatio: 1.0,
+              },
+              handleScan,
+              handleScanError
+            );
+            
+            if (isActive) {
+              setScanner(qrScanner);
+              console.log('[Feedback QR] ✅ Scanner started! Point camera at QR code...');
+              toast.success('Camera ready! Point at stall QR code', { duration: 2000 });
+            }
+          } else {
+            throw new Error('No cameras found on this device');
           }
         } catch (error) {
           console.error('[Feedback QR] Failed to initialize scanner:', error);
-          toast.error(`Camera error: ${error.message || 'Please check camera permissions'}`);
+          
+          // Better error messages based on error type
+          if (error.name === 'NotAllowedError') {
+            toast.error('Camera permission denied. Please allow camera access in your browser settings.');
+          } else if (error.name === 'NotFoundError') {
+            toast.error('No camera found on this device.');
+          } else if (error.name === 'NotReadableError') {
+            toast.error('Camera is already in use by another application.');
+          } else {
+            toast.error(`Camera error: ${error.message || 'Please check camera permissions'}`);
+          }
+          
           setShowScanner(false);
         }
       }
@@ -229,7 +257,10 @@ export default function StudentFeedback() {
       isActive = false;
       if (qrScanner) {
         console.log('[Feedback QR] Cleaning up scanner...');
-        qrScanner.clear().catch((err) => {
+        qrScanner.stop().then(() => {
+          console.log('[Feedback QR] Scanner stopped successfully');
+          qrScanner.clear();
+        }).catch((err) => {
           console.log('[Feedback QR] Cleanup error (safe to ignore):', err.message);
         });
       }
@@ -262,17 +293,21 @@ export default function StudentFeedback() {
     });
   };
 
-  const cancelScan = () => {
+  const cancelScan = async () => {
     console.log('[Feedback QR] Cancel scan requested');
-    setShowScanner(false);
     setIsProcessingScan(false);
     if (scanner) {
-      console.log('[Feedback QR] Clearing scanner...');
-      scanner.clear().catch(err => {
-        console.log('[Feedback QR] Error clearing scanner:', err.message);
-      });
+      try {
+        console.log('[Feedback QR] Stopping scanner...');
+        await scanner.stop();
+        await scanner.clear();
+        console.log('[Feedback QR] Scanner stopped and cleared');
+      } catch (err) {
+        console.log('[Feedback QR] Error stopping scanner:', err.message);
+      }
       setScanner(null);
     }
+    setShowScanner(false);
   };
 
   return (
@@ -357,10 +392,14 @@ export default function StudentFeedback() {
                     <span className="text-xs opacity-75">Keep the QR code within the frame and hold steady</span>
                   </p>
                 </div>
-                <div id="qr-scanner" className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600"></div>
+                <div 
+                  id="qr-scanner" 
+                  className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600 bg-black"
+                  style={{ minHeight: '300px', width: '100%' }}
+                ></div>
                 <button
                   onClick={cancelScan}
-                  className="w-full py-4 bg-gray-600 text-white rounded-xl font-semibold hover:bg-gray-700 transition-all duration-300 flex items-center justify-center gap-2"
+                  className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
                 >
                   <X size={20} />
                   Cancel Scan
