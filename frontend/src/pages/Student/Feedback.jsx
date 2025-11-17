@@ -13,6 +13,7 @@ export default function StudentFeedback() {
   const [comment, setComment] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [scanner, setScanner] = useState(null);
+  const [isProcessingScan, setIsProcessingScan] = useState(false);
   const queryClient = useQueryClient();
   const scannerRef = useRef(null);
 
@@ -106,14 +107,18 @@ export default function StudentFeedback() {
             'qr-scanner',
             { 
               fps: 10, 
-              qrbox: { width: 250, height: 250 },
-              aspectRatio: 1.0,
+              qrbox: 250, // Use number instead of object for better compatibility
+              aspectRatio: 1.777778, // 16:9 for mobile cameras
               rememberLastUsedCamera: true,
+              showTorchButtonIfSupported: true,
+              showZoomSliderIfSupported: true,
+              defaultZoomValueIfSupported: 2,
+              supportedScanTypes: [0, 1], // Support both QR_CODE and other formats
             },
             false
           );
 
-          console.log('QR Scanner initialized');
+          console.log('QR Scanner initialized with enhanced settings');
           qrScanner.render(handleScan, handleScanError);
           
           if (isActive) {
@@ -139,6 +144,13 @@ export default function StudentFeedback() {
   }, [showScanner]);
 
   const handleScan = async (decodedText) => {
+    // Prevent processing multiple scans at once
+    if (isProcessingScan) {
+      console.log('[Feedback QR] Already processing a scan, ignoring...');
+      return;
+    }
+
+    setIsProcessingScan(true);
     console.log('[Feedback QR] Raw scanned data:', decodedText);
     
     try {
@@ -151,12 +163,14 @@ export default function StudentFeedback() {
       // Validate QR type
       if (type !== 'stall') {
         toast.error('This is not a stall QR code');
+        setIsProcessingScan(false);
         return;
       }
 
       // Validate event match
       if (eventId !== selectedEvent) {
         toast.error('This QR code is for a different event');
+        setIsProcessingScan(false);
         return;
       }
 
@@ -166,6 +180,7 @@ export default function StudentFeedback() {
       
       if (!stall) {
         toast.error('Stall not found in this event');
+        setIsProcessingScan(false);
         return;
       }
 
@@ -173,26 +188,40 @@ export default function StudentFeedback() {
       const alreadyFeedback = myFeedbacks.find(f => f.stallId?.id === stallId || f.stallId === stallId);
       if (alreadyFeedback) {
         toast.error('You have already submitted feedback for this stall');
+        setIsProcessingScan(false);
         return;
       }
 
-      // Set scanned stall and close scanner
-      setScannedStall(stall);
-      setShowScanner(false);
+      // SUCCESS! Set scanned stall and close scanner
+      console.log('[Feedback QR] ✅ Scan successful! Stall:', stall.name);
+      
+      // Close and clean up scanner
       if (scanner) {
-        scanner.clear().catch(console.error);
+        await scanner.clear().catch(console.error);
         setScanner(null);
       }
-      toast.success(`Scanned: ${stall.name}! Now give your feedback.`);
+      
+      setScannedStall(stall);
+      setShowScanner(false);
+      setIsProcessingScan(false);
+      
+      toast.success(`✅ Scanned: ${stall.name}! Now give your feedback.`, {
+        duration: 3000,
+        icon: '🎯',
+      });
     } catch (error) {
       console.error('[Feedback QR] Scan error:', error);
       toast.error('Invalid QR code format. Please scan a stall QR code.');
+      setIsProcessingScan(false);
     }
   };
 
   const handleScanError = (error) => {
-    // Ignore scanning errors (too many logs)
-    console.debug('Scanning...', error);
+    // These are normal scanning errors, don't show to user
+    // Only log at debug level to avoid console spam
+    if (error && !error.includes('NotFoundException')) {
+      console.debug('[Feedback QR] Scanning... Waiting for QR code');
+    }
   };
 
   const handleSubmit = (e) => {
@@ -294,6 +323,13 @@ export default function StudentFeedback() {
 
             {showScanner && (
               <div className="space-y-4 animate-fadeIn">
+                <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-600 rounded-xl p-4 mb-3">
+                  <p className="text-sm text-blue-800 dark:text-blue-200 font-medium text-center">
+                    📱 Point your camera at the stall's QR code
+                    <br />
+                    <span className="text-xs opacity-75">Keep the QR code within the frame and hold steady</span>
+                  </p>
+                </div>
                 <div id="qr-scanner" className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600"></div>
                 <button
                   onClick={cancelScan}
