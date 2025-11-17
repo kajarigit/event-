@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Feedback = require('../models/Feedback');
 const Vote = require('../models/Vote');
 const Attendance = require('../models/Attendance');
@@ -148,7 +149,10 @@ exports.submitFeedback = async (req, res, next) => {
     // Update stall statistics
     const feedbackStats = await Feedback.aggregate([
       {
-        $match: { stallId: stall._id, eventId: event._id },
+        $match: { 
+          stallId: mongoose.Types.ObjectId(stallId),
+          eventId: mongoose.Types.ObjectId(eventId)
+        },
       },
       {
         $group: {
@@ -159,10 +163,18 @@ exports.submitFeedback = async (req, res, next) => {
       },
     ]);
 
+    console.log('[Feedback] Stats calculated:', feedbackStats);
+
     if (feedbackStats.length > 0) {
       stall.stats.totalFeedbacks = feedbackStats[0].totalFeedbacks;
       stall.stats.averageRating = Math.round(feedbackStats[0].averageRating * 10) / 10;
       await stall.save();
+      console.log('[Feedback] Stall stats updated:', {
+        totalFeedbacks: stall.stats.totalFeedbacks,
+        averageRating: stall.stats.averageRating
+      });
+    } else {
+      console.log('[Feedback] No feedback stats found - this should not happen!');
     }
 
     res.status(201).json({

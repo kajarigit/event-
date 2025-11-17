@@ -59,6 +59,8 @@ export default function Stalls() {
       // API returns { success: true, data: [...] }
       return response.data?.data || response.data || [];
     },
+    refetchInterval: 10000, // Auto-refresh every 10 seconds to show updated feedback stats
+    refetchOnWindowFocus: true, // Refresh when admin returns to page
   });
 
   // Create mutation
