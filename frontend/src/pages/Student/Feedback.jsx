@@ -14,6 +14,7 @@ export default function StudentFeedback() {
   const [showScanner, setShowScanner] = useState(false);
   const [scanner, setScanner] = useState(null);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
+  const [scanValidation, setScanValidation] = useState(null); // { status: 'valid'|'invalid', message: '', details: '' }
   const queryClient = useQueryClient();
   const scannerRef = useRef(null);
 
@@ -101,13 +102,32 @@ export default function StudentFeedback() {
     
     try {
       // Parse QR code data (expected format: JSON with stallId)
-      const qrData = JSON.parse(decodedText);
-      console.log('[Feedback QR] Parsed QR data:', qrData);
+      let qrData;
+      try {
+        qrData = JSON.parse(decodedText);
+        console.log('[Feedback QR] Parsed QR data:', qrData);
+      } catch (parseError) {
+        setScanValidation({
+          status: 'invalid',
+          message: '❌ Invalid QR Code Format',
+          details: 'This QR code is not a valid stall code. It must be a JSON format with stallId, eventId, and type fields.',
+          timestamp: new Date().toLocaleTimeString()
+        });
+        toast.error('Invalid QR code format. Please scan a stall QR code.');
+        setIsProcessingScan(false);
+        return;
+      }
       
       const { stallId, eventId, type } = qrData;
 
       // Validate QR type
       if (type !== 'stall') {
+        setScanValidation({
+          status: 'invalid',
+          message: '❌ Wrong QR Code Type',
+          details: `This QR code is for "${type || 'unknown'}", not for a stall. Please scan the stall's QR code displayed at their booth.`,
+          timestamp: new Date().toLocaleTimeString()
+        });
         toast.error('This is not a stall QR code');
         setIsProcessingScan(false);
         return;
@@ -115,6 +135,14 @@ export default function StudentFeedback() {
 
       // Validate event match
       if (eventId !== selectedEvent) {
+        const eventName = events.find(e => e.id === eventId)?.name || 'another event';
+        const currentEventName = events.find(e => e.id === selectedEvent)?.name || 'current event';
+        setScanValidation({
+          status: 'invalid',
+          message: '❌ Wrong Event',
+          details: `This QR code belongs to "${eventName}", but you have "${currentEventName}" selected. Please select the correct event first.`,
+          timestamp: new Date().toLocaleTimeString()
+        });
         toast.error('This QR code is for a different event');
         setIsProcessingScan(false);
         return;
@@ -125,6 +153,12 @@ export default function StudentFeedback() {
       console.log('[Feedback QR] Found stall:', stall?.name || 'Not found');
       
       if (!stall) {
+        setScanValidation({
+          status: 'invalid',
+          message: '❌ Stall Not Found',
+          details: `Stall ID "${stallId}" does not exist in this event, or the stall has been removed. Please verify with event organizers.`,
+          timestamp: new Date().toLocaleTimeString()
+        });
         toast.error('Stall not found in this event');
         setIsProcessingScan(false);
         return;
@@ -133,6 +167,12 @@ export default function StudentFeedback() {
       // Check if already given feedback to this stall
       const alreadyFeedback = myFeedbacks.find(f => f.stallId?.id === stallId || f.stallId === stallId);
       if (alreadyFeedback) {
+        setScanValidation({
+          status: 'invalid',
+          message: '❌ Already Submitted',
+          details: `You have already submitted feedback for "${stall.name}". You can only provide one feedback per stall. Check your submitted feedbacks below.`,
+          timestamp: new Date().toLocaleTimeString()
+        });
         toast.error('You have already submitted feedback for this stall');
         setIsProcessingScan(false);
         return;
@@ -140,6 +180,13 @@ export default function StudentFeedback() {
 
       // SUCCESS! Set scanned stall and close scanner
       console.log('[Feedback QR] ✅ Scan successful! Stall:', stall.name);
+      
+      setScanValidation({
+        status: 'valid',
+        message: '✅ Valid Stall QR Code',
+        details: `Scanned: "${stall.name}" from ${stall.department} department. You can now submit your feedback!`,
+        timestamp: new Date().toLocaleTimeString()
+      });
       
       // Close and clean up scanner
       if (scanner) {
@@ -163,10 +210,16 @@ export default function StudentFeedback() {
       });
     } catch (error) {
       console.error('[Feedback QR] Scan error:', error);
+      setScanValidation({
+        status: 'invalid',
+        message: '❌ Scan Error',
+        details: `An unexpected error occurred: ${error.message}. Please try scanning again.`,
+        timestamp: new Date().toLocaleTimeString()
+      });
       toast.error('Invalid QR code format. Please scan a stall QR code.');
       setIsProcessingScan(false);
     }
-  }, [isProcessingScan, selectedEvent, stalls, myFeedbacks, scanner]);
+  }, [isProcessingScan, selectedEvent, stalls, myFeedbacks, scanner, events]);
 
   // Handle scan errors
   const handleScanError = useCallback((error) => {
@@ -296,6 +349,7 @@ export default function StudentFeedback() {
   const cancelScan = async () => {
     console.log('[Feedback QR] Cancel scan requested');
     setIsProcessingScan(false);
+    setScanValidation(null); // Clear validation message
     if (scanner) {
       try {
         console.log('[Feedback QR] Stopping scanner...');
@@ -367,6 +421,7 @@ export default function StudentFeedback() {
                 <button
                   onClick={() => {
                     console.log('[Feedback QR] Opening scanner...');
+                    setScanValidation(null); // Clear previous validation
                     setShowScanner(true);
                   }}
                   disabled={!status?.isCheckedIn}
@@ -392,6 +447,49 @@ export default function StudentFeedback() {
                     <span className="text-xs opacity-75">Keep the QR code within the frame and hold steady</span>
                   </p>
                 </div>
+
+                {/* Scan Validation Feedback */}
+                {scanValidation && (
+                  <div 
+                    className={`p-4 rounded-xl border-2 animate-scaleIn ${
+                      scanValidation.status === 'valid'
+                        ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600'
+                        : 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      {scanValidation.status === 'valid' ? (
+                        <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                      )}
+                      <div className="flex-1">
+                        <h4 className={`font-bold text-lg mb-1 ${
+                          scanValidation.status === 'valid'
+                            ? 'text-green-900 dark:text-green-100'
+                            : 'text-red-900 dark:text-red-100'
+                        }`}>
+                          {scanValidation.message}
+                        </h4>
+                        <p className={`text-sm ${
+                          scanValidation.status === 'valid'
+                            ? 'text-green-800 dark:text-green-200'
+                            : 'text-red-800 dark:text-red-200'
+                        }`}>
+                          {scanValidation.details}
+                        </p>
+                        <p className={`text-xs mt-2 opacity-75 ${
+                          scanValidation.status === 'valid'
+                            ? 'text-green-700 dark:text-green-300'
+                            : 'text-red-700 dark:text-red-300'
+                        }`}>
+                          Scanned at {scanValidation.timestamp}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div 
                   id="qr-scanner" 
                   className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600 bg-black"
@@ -419,13 +517,85 @@ export default function StudentFeedback() {
                     <p className="text-green-700 dark:text-green-300">{scannedStall.department}</p>
                   </div>
                   <button
-                    onClick={() => setScannedStall(null)}
+                    onClick={() => {
+                      setScannedStall(null);
+                      setScanValidation(null);
+                    }}
                     className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-full transition-colors"
                     title="Scan different stall"
                   >
                     <X className="text-green-700 dark:text-green-300" size={24} />
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Show last scan validation if scanner is closed and no stall selected */}
+            {!showScanner && !scannedStall && scanValidation && (
+              <div 
+                className={`p-4 rounded-xl border-2 animate-fadeIn ${
+                  scanValidation.status === 'valid'
+                    ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600'
+                    : 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  {scanValidation.status === 'valid' ? (
+                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div className="flex-1">
+                    <h4 className={`font-bold text-lg mb-1 ${
+                      scanValidation.status === 'valid'
+                        ? 'text-green-900 dark:text-green-100'
+                        : 'text-red-900 dark:text-red-100'
+                    }`}>
+                      {scanValidation.message}
+                    </h4>
+                    <p className={`text-sm ${
+                      scanValidation.status === 'valid'
+                        ? 'text-green-800 dark:text-green-200'
+                        : 'text-red-800 dark:text-red-200'
+                    }`}>
+                      {scanValidation.details}
+                    </p>
+                    <p className={`text-xs mt-2 opacity-75 ${
+                      scanValidation.status === 'valid'
+                        ? 'text-green-700 dark:text-green-300'
+                        : 'text-red-700 dark:text-red-300'
+                    }`}>
+                      Last scan at {scanValidation.timestamp}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setScanValidation(null)}
+                    className={`p-1 rounded-full transition-colors ${
+                      scanValidation.status === 'valid'
+                        ? 'hover:bg-green-200 dark:hover:bg-green-800'
+                        : 'hover:bg-red-200 dark:hover:bg-red-800'
+                    }`}
+                    title="Dismiss"
+                  >
+                    <X className={`w-5 h-5 ${
+                      scanValidation.status === 'valid'
+                        ? 'text-green-700 dark:text-green-300'
+                        : 'text-red-700 dark:text-red-300'
+                    }`} />
+                  </button>
+                </div>
+                {scanValidation.status === 'invalid' && (
+                  <button
+                    onClick={() => {
+                      setScanValidation(null);
+                      setShowScanner(true);
+                    }}
+                    className="mt-3 w-full py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Camera size={18} />
+                    Try Scanning Again
+                  </button>
+                )}
               </div>
             )}
           </div>

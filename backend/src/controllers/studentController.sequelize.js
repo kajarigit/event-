@@ -210,6 +210,15 @@ exports.castVote = async (req, res, next) => {
     const { stallId, eventId } = req.body;
     const studentId = req.user.id;
 
+    // Get student details with department
+    const student = await User.findByPk(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found',
+      });
+    }
+
     // Check if event allows voting
     const event = await Event.findByPk(eventId);
     if (!event || !event.allowVoting) {
@@ -242,6 +251,16 @@ exports.castVote = async (req, res, next) => {
         success: false,
         message: 'Stall not found or inactive',
       });
+    }
+
+    // DEPARTMENT RESTRICTION: Student can only vote for stalls from their own department
+    if (student.department && stall.department) {
+      if (student.department !== stall.department) {
+        return res.status(403).json({
+          success: false,
+          message: `You can only vote for stalls from your department (${student.department}). This stall is from ${stall.department}.`,
+        });
+      }
     }
 
     // Check if vote already exists

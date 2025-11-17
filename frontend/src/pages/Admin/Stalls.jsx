@@ -198,6 +198,12 @@ export default function Stalls() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    // Prevent multiple submissions
+    if (createMutation.isLoading || updateMutation.isLoading) {
+      console.log('[Stall Form] Already submitting, ignoring...');
+      return;
+    }
+    
     const stallData = {
       name: formData.name,
       department: formData.department,

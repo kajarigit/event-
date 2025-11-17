@@ -8,7 +8,6 @@ import { Trophy, Award, Medal, Star, CheckCircle, AlertCircle, Filter } from 'lu
 export default function StudentVoting() {
   const [selectedEvent, setSelectedEvent] = useState('');
   const [selectedStalls, setSelectedStalls] = useState({ 1: '', 2: '', 3: '' });
-  const [departmentFilter, setDepartmentFilter] = useState('all');
   const [searchFilter, setSearchFilter] = useState('');
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -150,29 +149,28 @@ export default function StudentVoting() {
 
     let availableStalls = stalls.filter((stall) => !votedStallIds.includes(stall.id));
 
-    // Apply department filter
-    if (departmentFilter === 'my-department' && user?.department) {
+    // DEPARTMENT RESTRICTION: Students can only vote for stalls from their own department
+    if (user?.department) {
       availableStalls = availableStalls.filter(stall => stall.department === user.department);
-    } else if (departmentFilter !== 'all') {
-      availableStalls = availableStalls.filter(stall => stall.department === departmentFilter);
     }
 
-    // Apply search filter
+    // Apply search filter (after department filter)
     if (searchFilter.trim()) {
       const search = searchFilter.toLowerCase();
       availableStalls = availableStalls.filter(stall =>
         stall.name?.toLowerCase().includes(search) ||
         stall.description?.toLowerCase().includes(search) ||
-        stall.category?.toLowerCase().includes(search) ||
-        stall.department?.toLowerCase().includes(search)
+        stall.category?.toLowerCase().includes(search)
       );
     }
 
     return availableStalls;
   };
 
-  // Get unique departments from stalls for filter
-  const departments = [...new Set(stalls.map(stall => stall.department).filter(Boolean))].sort();
+  // Get stalls count for user's department
+  const departmentStallsCount = user?.department 
+    ? stalls.filter(stall => stall.department === user.department).length 
+    : stalls.length;
 
   return (
     <div className="space-y-6">
@@ -203,55 +201,52 @@ export default function StudentVoting() {
 
       {selectedEvent && (
         <>
-          {/* Filters */}
-          <div className="card">
-            <div className="flex items-center gap-2 mb-4">
-              <Filter className="w-5 h-5 text-gray-600" />
-              <h3 className="font-semibold text-gray-900">Filter Stalls</h3>
+          {/* Department Restriction Notice */}
+          {user?.department && (
+            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 flex items-start space-x-3">
+              <AlertCircle className="w-6 h-6 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div>
+                <h4 className="font-bold text-blue-900 text-lg">Department Voting Restriction</h4>
+                <p className="text-sm text-blue-800 mt-1">
+                  You can only vote for stalls from your department: <span className="font-semibold">{user.department}</span>
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  📊 Available stalls from {user.department}: {departmentStallsCount} stall{departmentStallsCount !== 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-blue-600 mt-2 italic">
+                  Note: Feedback can be given to any stall, but voting is restricted to your department.
+                </p>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Department
-                </label>
-                <select
-                  value={departmentFilter}
-                  onChange={(e) => setDepartmentFilter(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Departments</option>
-                  {user?.department && (
-                    <option value="my-department">My Department ({user.department})</option>
-                  )}
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>
-                      {dept}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Search
-                </label>
-                <input
-                  type="text"
-                  value={searchFilter}
-                  onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Search by name, category..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+          )}
+
+          {/* Search Filter */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="w-5 h-5 text-gray-600" />
+              <h3 className="font-semibold text-gray-900">Search Stalls</h3>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search by Name or Category
+              </label>
+              <input
+                type="text"
+                value={searchFilter}
+                onChange={(e) => setSearchFilter(e.target.value)}
+                placeholder="Search by name, category..."
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           </div>
 
           {/* Check-in Status Warning */}
           {!status?.isCheckedIn && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5" />
+            <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 flex items-start space-x-3">
+              <AlertCircle className="w-6 h-6 text-yellow-600 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="font-medium text-yellow-900">Not Checked In</h4>
-                <p className="text-sm text-yellow-800">
+                <h4 className="font-bold text-yellow-900 text-lg">Not Checked In</h4>
+                <p className="text-sm text-yellow-800 mt-1">
                   You must check-in to the event before voting. Show your QR code at the
                   gate to check in.
                 </p>
@@ -333,15 +328,28 @@ export default function StudentVoting() {
           <div className="card bg-gray-50">
             <h3 className="font-semibold mb-2">Voting Instructions:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>• Select your top 3 favorite stalls</li>
+              <li>• Select your top 3 favorite stalls from your department ({user?.department || 'your department'})</li>
               <li>• Rank 1 gets 3 points, Rank 2 gets 2 points, Rank 3 gets 1 point</li>
               <li>• You cannot vote for the same stall multiple times</li>
               <li>• You can change your votes anytime before the event ends</li>
               <li>• Must be checked-in to vote</li>
+              <li className="font-semibold text-blue-700">• Department Restriction: You can only vote for stalls from {user?.department || 'your department'}</li>
             </ul>
           </div>
 
-          {/* Available Stalls */}
+          {/* No Stalls Available Message */}
+          {departmentStallsCount === 0 && stalls.length > 0 && (
+            <div className="card text-center py-8 border-2 border-orange-200 bg-orange-50">
+              <AlertCircle className="w-12 h-12 mx-auto mb-3 text-orange-500" />
+              <h4 className="font-semibold text-orange-900 text-lg mb-2">No Stalls from Your Department</h4>
+              <p className="text-orange-800 text-sm">
+                There are {stalls.length} total stalls, but none from your department ({user?.department}).
+              </p>
+              <p className="text-orange-700 text-xs mt-2">
+                You can still give feedback to all stalls, but voting is restricted to your department only.
+              </p>
+            </div>
+          )}
           {stalls.length === 0 && (
             <div className="card text-center py-8 text-gray-500">
               <AlertCircle className="w-12 h-12 mx-auto mb-2 text-gray-400" />
