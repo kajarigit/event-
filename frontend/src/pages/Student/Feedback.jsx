@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentApi } from '../../services/api';
 import toast from 'react-hot-toast';
 import { Star, Send, CheckCircle, AlertCircle, MessageSquare, Camera, X, Scan } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function StudentFeedback() {
   const [selectedEvent, setSelectedEvent] = useState('');
@@ -12,14 +12,10 @@ export default function StudentFeedback() {
   const [hoverRating, setHoverRating] = useState(0);
   const [comment, setComment] = useState('');
   const [showScanner, setShowScanner] = useState(false);
-  const [scanner, setScanner] = useState(null);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [scanValidation, setScanValidation] = useState(null); // { status: 'valid'|'invalid', message: '', details: '' }
-  const [isCameraLoading, setIsCameraLoading] = useState(false);
   const queryClient = useQueryClient();
-  const scannerInstanceRef = useRef(null); // Raw scanner instance
-  const isInitializingRef = useRef(false); // Prevent double init
-  const containerMountedRef = useRef(false); // Track if container exists
+  const scannerRef = useRef(null); // Scanner instance reference
 
   // Fetch events (active or all)
   const { data: events = [] } = useQuery({
@@ -211,7 +207,7 @@ export default function StudentFeedback() {
       toast.error('Invalid QR code format. Please scan a stall QR code.');
       setIsProcessingScan(false);
     }
-  }, [isProcessingScan, selectedEvent, stalls, myFeedbacks, scanner, events]);
+  }, [isProcessingScan, selectedEvent, stalls, myFeedbacks, events]);
 
   // Handle scan errors
   const handleScanError = useCallback((error) => {
@@ -222,102 +218,83 @@ export default function StudentFeedback() {
     }
   }, []);
 
-  // Initialize QR Scanner - Completely isolated from React
+  // Initialize QR Scanner - Using Html5QrcodeScanner (same as volunteer scanner)
   useEffect(() => {
-    if (!showScanner) {
-      // Clean up when scanner is closed
-      if (scannerInstanceRef.current) {
-        console.log('[Feedback QR] Closing scanner');
-        const instance = scannerInstanceRef.current;
-        scannerInstanceRef.current = null;
-        containerMountedRef.current = false;
-        
-        // Async cleanup
-        Promise.resolve().then(() => {
-          return instance.stop();
-        }).catch(() => {
-          console.log('[Feedback QR] Scanner already stopped');
-        });
-      }
-      return;
-    }
+    if (!showScanner) return; // Only init when scanner should be shown
 
-    // Don't initialize if already initializing or initialized
-    if (isInitializingRef.current || scannerInstanceRef.current) {
-      console.log('[Feedback QR] Scanner already exists, skipping init');
-      return;
-    }
+    let scanner;
+    let isActive = true; // Track if component is still mounted
 
-    isInitializingRef.current = true;
-    
-    const initScanner = async () => {
-      try {
-        setIsCameraLoading(true);
-        console.log('[Feedback QR] 🚀 Initializing scanner...');
-        
-        // Wait for DOM
-        await new Promise(resolve => setTimeout(resolve, 600));
-        
-        const element = document.getElementById('qr-scanner');
-        if (!element) {
-          throw new Error('Scanner container not found');
-        }
-        
-        containerMountedRef.current = true;
-        console.log('[Feedback QR] Creating scanner instance');
-        
-        // Create instance
-        const instance = new Html5Qrcode('qr-scanner');
-        
-        // Get cameras
-        const cameras = await Html5Qrcode.getCameras();
-        if (!cameras || cameras.length === 0) {
-          throw new Error('No cameras found');
-        }
-        
-        console.log('[Feedback QR] ✅ Found', cameras.length, 'camera(s)');
-        
-        // Select camera
-        const backCamera = cameras.find(cam => 
-          cam.label.toLowerCase().includes('back') || 
-          cam.label.toLowerCase().includes('environment')
-        );
-        const cameraId = backCamera?.id || cameras[0].id;
-        
-        // Start scanner
-        await instance.start(
-          cameraId,
-          {
-            fps: 10,
-            qrbox: (width, height) => {
-              const size = Math.min(width, height) * 0.7;
-              return { width: size, height: size };
+    const initScanner = () => {
+      scanner = new Html5QrcodeScanner('qr-scanner', {
+        fps: 10,
+        qrbox: (viewfinderWidth, viewfinderHeight) => {
+          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.7;
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.0,
+      });
+
+      scanner.render(
+        (decodedText) => {
+          // QR code successfully scanned
+          if (!isActive) return; // Don't process if component unmounted
+          
+          console.log('[Feedback QR] QR Code scanned:', decodedText);
+          scanner.pause(true);
+          
+          // Process the scan
+          handleScan(decodedText);
+          
+          // Resume scanning after 3 seconds (in case user wants to scan another)
+          setTimeout(() => {
+            if (isActive && scanner) {
+              scanner.resume();
             }
-          },
-          handleScan,
-          handleScanError
-        );
-        
-        console.log('[Feedback QR] ✅ Scanner started!');
-        scannerInstanceRef.current = instance;
-        setScanner(instance);
-        setIsCameraLoading(false);
-        toast.success('📸 Camera ready!', { id: 'camera-init', duration: 2000 });
-        
-      } catch (error) {
-        console.error('[Feedback QR] Init error:', error);
-        setIsCameraLoading(false);
-        toast.error('Camera error: ' + error.message, { duration: 5000 });
-        setShowScanner(false);
-      } finally {
-        isInitializingRef.current = false;
-      }
+          }, 3000);
+        },
+        (errorMessage) => {
+          // Normal scanning errors - don't show to user
+          // Only log at debug level to avoid console spam
+          if (errorMessage && !errorMessage.includes('NotFoundException')) {
+            console.debug('[Feedback QR] Scanning... Waiting for QR code');
+          }
+        }
+      );
+
+      scannerRef.current = scanner;
+      console.log('[Feedback QR] ✅ Scanner initialized');
+      toast.success('📸 Camera ready! Point at stall QR code', { id: 'camera-init', duration: 2000 });
     };
 
-    initScanner();
-    
-    // No cleanup in this effect - handled by showScanner change
-  }, [showScanner, handleScan, handleScanError]);
+    // Initialize scanner
+    try {
+      initScanner();
+    } catch (error) {
+      console.error('[Feedback QR] Scanner initialization failed:', error);
+      toast.error('Camera error: ' + error.message, { duration: 5000 });
+      setShowScanner(false);
+    }
+
+    return () => {
+      isActive = false; // Mark component as unmounted
+      if (scanner) {
+        try {
+          // Clear scanner safely
+          scanner.clear().catch((err) => {
+            // Ignore DOM errors during cleanup
+            if (!err.message?.includes('removeChild')) {
+              console.error('[Feedback QR] Scanner cleanup error:', err);
+            }
+          });
+        } catch (err) {
+          // Silently ignore cleanup errors
+          console.debug('[Feedback QR] Scanner already cleaned up');
+        }
+      }
+      scannerRef.current = null;
+    };
+  }, [showScanner, handleScan]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -349,7 +326,6 @@ export default function StudentFeedback() {
     console.log('[Feedback QR] Cancel requested');
     setIsProcessingScan(false);
     setScanValidation(null);
-    setIsCameraLoading(false);
     setShowScanner(false); // This will trigger cleanup in useEffect
   };
 
@@ -442,82 +418,14 @@ export default function StudentFeedback() {
                   </p>
                 </div>
 
-                {/* Camera Loading State */}
-                {isCameraLoading && (
-                  <div className="bg-purple-50 dark:bg-purple-900/30 border-2 border-purple-300 dark:border-purple-600 rounded-xl p-6 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-purple-600"></div>
-                      <p className="text-purple-900 dark:text-purple-100 font-semibold">
-                        📸 Initializing Camera...
-                      </p>
-                      <p className="text-sm text-purple-700 dark:text-purple-300">
-                        Please allow camera permissions if prompted
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Scan Validation Feedback */}
-                {scanValidation && (
-                  <div 
-                    className={`p-4 rounded-xl border-2 animate-scaleIn ${
-                      scanValidation.status === 'valid'
-                        ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600'
-                        : 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      {scanValidation.status === 'valid' ? (
-                        <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                      )}
-                      <div className="flex-1">
-                        <h4 className={`font-bold text-lg mb-1 ${
-                          scanValidation.status === 'valid'
-                            ? 'text-green-900 dark:text-green-100'
-                            : 'text-red-900 dark:text-red-100'
-                        }`}>
-                          {scanValidation.message}
-                        </h4>
-                        <p className={`text-sm ${
-                          scanValidation.status === 'valid'
-                            ? 'text-green-800 dark:text-green-200'
-                            : 'text-red-800 dark:text-red-200'
-                        }`}>
-                          {scanValidation.details}
-                        </p>
-                        <p className={`text-xs mt-2 opacity-75 ${
-                          scanValidation.status === 'valid'
-                            ? 'text-green-700 dark:text-green-300'
-                            : 'text-red-700 dark:text-red-300'
-                        }`}>
-                          Scanned at {scanValidation.timestamp}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
                 <div 
                   id="qr-scanner" 
-                  className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600 bg-black w-full"
+                  className="rounded-xl overflow-hidden w-full"
                   style={{ 
-                    minHeight: '400px', 
-                    maxWidth: '100%',
-                    position: 'relative'
+                    minHeight: '300px', 
+                    maxWidth: '100%'
                   }}
-                >
-                  {/* Placeholder while camera loads */}
-                  {!scanner && (
-                    <div className="absolute inset-0 flex items-center justify-center text-white">
-                      <div className="text-center">
-                        <div className="animate-pulse text-6xl mb-4">📹</div>
-                        <p className="text-lg">Initializing camera...</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+                ></div>
                 <button
                   onClick={cancelScan}
                   className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
