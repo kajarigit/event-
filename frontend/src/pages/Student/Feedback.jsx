@@ -236,7 +236,7 @@ export default function StudentFeedback() {
           useBarCodeDetectorIfSupported: true // Use native barcode detector for speed
         },
         rememberLastUsedCamera: true, // Remember camera preference
-        supportedScanTypes: [0, 1, 2], // Support QR_CODE, AZTEC, DATA_MATRIX
+        supportedScanTypes: [0, 1], // Support QR_CODE and AZTEC (max 2 allowed)
       });
 
       scanner.render(
