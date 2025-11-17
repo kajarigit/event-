@@ -244,28 +244,8 @@ export default function StudentFeedback() {
           console.log('[Feedback QR] Browser:', navigator.userAgent);
           console.log('[Feedback QR] HTTPS:', window.location.protocol === 'https:');
           
-          // Step 1: Request camera permission explicitly first
-          console.log('[Feedback QR] 📹 Requesting camera permission...');
-          toast.loading('Requesting camera permission...', { id: 'camera-permission' });
-          
-          try {
-            // Request camera access using getUserMedia to trigger permission prompt
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-              video: { facingMode: "environment" } // Back camera preferred
-            });
-            
-            // Stop the test stream immediately - we just needed the permission
-            stream.getTracks().forEach(track => track.stop());
-            console.log('[Feedback QR] ✅ Camera permission granted!');
-            toast.success('Camera permission granted!', { id: 'camera-permission' });
-          } catch (permError) {
-            console.error('[Feedback QR] ❌ Camera permission denied:', permError);
-            toast.error('Camera permission denied. Please allow camera access.', { id: 'camera-permission' });
-            throw permError;
-          }
-          
           // Wait for DOM element to be ready
-          await new Promise(resolve => setTimeout(resolve, 300));
+          await new Promise(resolve => setTimeout(resolve, 500));
           
           // Check if element exists
           const element = document.getElementById('qr-scanner');
@@ -277,65 +257,93 @@ export default function StudentFeedback() {
             return;
           }
 
-          console.log('[Feedback QR] ✅ Scanner element found:', element);
+          console.log('[Feedback QR] ✅ Scanner element found');
           console.log('[Feedback QR] Creating Html5Qrcode instance...');
           
           // Use Html5Qrcode directly for better control
           qrScanner = new Html5Qrcode('qr-scanner');
           console.log('[Feedback QR] ✅ Html5Qrcode instance created');
           
+          toast.loading('Requesting camera access...', { id: 'camera-init' });
+          
           console.log('[Feedback QR] 📹 Getting available cameras...');
           
-          // Get cameras with better error handling
+          // Get cameras
           let cameras;
           try {
             cameras = await Html5Qrcode.getCameras();
-            console.log('[Feedback QR] ✅ Available cameras:', cameras.length, cameras);
+            console.log('[Feedback QR] ✅ Cameras found:', cameras.length);
+            cameras.forEach((cam, idx) => {
+              console.log(`  Camera ${idx}: ${cam.label} (${cam.id})`);
+            });
           } catch (camError) {
             console.error('[Feedback QR] ❌ Failed to get cameras:', camError);
-            throw new Error(`Failed to access cameras: ${camError.message}`);
+            toast.error('Failed to access camera. Please check permissions.', { id: 'camera-init' });
+            throw camError;
           }
           
           if (!cameras || cameras.length === 0) {
-            throw new Error('No cameras found on this device. Please check your device has a camera and browser permissions are granted.');
+            toast.error('No cameras found on this device.', { id: 'camera-init' });
+            throw new Error('No cameras found');
           }
 
-          // Try to use back camera first (better for QR scanning), fallback to front
-          const cameraId = cameras.length > 1 ? cameras[cameras.length - 1].id : cameras[0].id;
-          console.log('[Feedback QR] 📸 Selected camera:', cameraId, cameras.find(c => c.id === cameraId)?.label);
+          // Select camera (prefer back/environment camera)
+          let selectedCameraId;
           
-          // Configure scanner with better settings
+          // Try to find back camera
+          const backCamera = cameras.find(camera => 
+            camera.label.toLowerCase().includes('back') || 
+            camera.label.toLowerCase().includes('rear') ||
+            camera.label.toLowerCase().includes('environment')
+          );
+          
+          if (backCamera) {
+            selectedCameraId = backCamera.id;
+            console.log('[Feedback QR] 📸 Using back camera:', backCamera.label);
+          } else {
+            selectedCameraId = cameras[cameras.length > 1 ? cameras.length - 1 : 0].id;
+            console.log('[Feedback QR] 📸 Using camera:', cameras.find(c => c.id === selectedCameraId)?.label);
+          }
+          
+          // Configure scanner with mobile-friendly settings
           const config = {
             fps: 10,
-            qrbox: { width: 250, height: 250 },
-            aspectRatio: 1.777, // 16:9 ratio
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+              const minEdgePercentage = 0.7;
+              const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
+              const qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
+              return {
+                width: qrboxSize,
+                height: qrboxSize
+              };
+            },
+            aspectRatio: 1.0,
             disableFlip: false,
-            formatsToSupport: [ 0 ], // QR_CODE format
-            experimentalFeatures: {
-              useBarCodeDetectorIfSupported: true
+            videoConstraints: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
             }
           };
           
-          console.log('[Feedback QR] 🎬 Starting camera with config:', config);
-          toast.loading('Starting camera...', { id: 'camera-start' });
+          console.log('[Feedback QR] 🎬 Starting camera...');
+          toast.loading('Starting camera...', { id: 'camera-init' });
           
           // Start scanning
           await qrScanner.start(
-            cameraId,
+            selectedCameraId,
             config,
             handleScan,
             handleScanError
           );
           
-          toast.dismiss('camera-start');
-          
           if (isActive) {
             setScanner(qrScanner);
-            setIsCameraLoading(false); // Camera loaded successfully
-            console.log('[Feedback QR] ✅✅✅ Scanner started successfully! Camera is now active.');
+            setIsCameraLoading(false);
+            console.log('[Feedback QR] ✅✅✅ Scanner started successfully!');
             toast.success('📸 Camera ready! Point at stall QR code', { 
-              duration: 3000,
-              icon: '✅' 
+              id: 'camera-init',
+              duration: 3000
             });
           } else {
             console.log('[Feedback QR] Component unmounted, stopping scanner');
@@ -344,9 +352,8 @@ export default function StudentFeedback() {
             setIsCameraLoading(false);
           }
         } catch (error) {
-          setIsCameraLoading(false); // Stop loading on error
-          toast.dismiss('camera-permission');
-          toast.dismiss('camera-start');
+          setIsCameraLoading(false);
+          toast.dismiss('camera-init');
           console.error('[Feedback QR] ❌ Failed to initialize scanner:', error);
           console.error('[Feedback QR] Error name:', error.name);
           console.error('[Feedback QR] Error message:', error.message);
@@ -579,9 +586,23 @@ export default function StudentFeedback() {
 
                 <div 
                   id="qr-scanner" 
-                  className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600 bg-black"
-                  style={{ minHeight: '300px', width: '100%' }}
-                ></div>
+                  className="rounded-xl overflow-hidden border-4 border-purple-300 dark:border-purple-600 bg-black w-full"
+                  style={{ 
+                    minHeight: '400px', 
+                    maxWidth: '100%',
+                    position: 'relative'
+                  }}
+                >
+                  {/* Placeholder while camera loads */}
+                  {!scanner && (
+                    <div className="absolute inset-0 flex items-center justify-center text-white">
+                      <div className="text-center">
+                        <div className="animate-pulse text-6xl mb-4">📹</div>
+                        <p className="text-lg">Initializing camera...</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={cancelScan}
                   className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
