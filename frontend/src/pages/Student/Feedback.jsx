@@ -191,16 +191,21 @@ export default function StudentFeedback() {
       });
       
       // Close and clean up scanner
-      const qrScanner = scannerRef.current || scanner;
+      const qrScanner = scannerRef.current;
       if (qrScanner) {
-        try {
-          await qrScanner.stop();
-          console.log('[Feedback QR] ✅ Scanner stopped after successful scan');
-        } catch (err) {
-          console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
-        }
+        console.log('[Feedback QR] Stopping scanner after successful scan...');
         scannerRef.current = null;
         setScanner(null);
+        
+        // Stop scanner async
+        setTimeout(async () => {
+          try {
+            await qrScanner.stop();
+            console.log('[Feedback QR] ✅ Scanner stopped after successful scan');
+          } catch (err) {
+            console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
+          }
+        }, 0);
       }
       
       setScannedStall(stall);
@@ -235,176 +240,126 @@ export default function StudentFeedback() {
 
   // Initialize QR Scanner
   useEffect(() => {
+    if (!showScanner) {
+      return; // Don't do anything if scanner not shown
+    }
+
+    // Prevent multiple initializations
+    if (scannerRef.current) {
+      console.log('[Feedback QR] Scanner already initialized, skipping');
+      return;
+    }
+
     let isActive = true;
+    let qrScanner = null;
 
     const initScanner = async () => {
-      if (showScanner && !scanner && isActive) {
-        setIsCameraLoading(true); // Start loading
-        try {
-          console.log('[Feedback QR] 🚀 Starting scanner initialization...');
-          console.log('[Feedback QR] Browser:', navigator.userAgent);
-          console.log('[Feedback QR] HTTPS:', window.location.protocol === 'https:');
-          
-          // Wait for DOM element to be ready
-          await new Promise(resolve => setTimeout(resolve, 500));
-          
-          // Check if element exists
-          const element = document.getElementById('qr-scanner');
-          if (!element) {
-            console.error('[Feedback QR] ❌ Scanner element not found in DOM');
-            toast.error('Scanner initialization failed. Please try again.');
-            setShowScanner(false);
-            setIsCameraLoading(false);
-            return;
-          }
+      setIsCameraLoading(true);
+      try {
+        console.log('[Feedback QR] 🚀 Starting scanner initialization...');
+        
+        // Wait for DOM element to be ready
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Check if still active and element exists
+        if (!isActive) {
+          console.log('[Feedback QR] Component unmounted, aborting init');
+          return;
+        }
 
-          console.log('[Feedback QR] ✅ Scanner element found');
-          console.log('[Feedback QR] Creating Html5Qrcode instance...');
-          
-          // Use Html5Qrcode directly for better control
-          const qrScanner = new Html5Qrcode('qr-scanner');
-          scannerRef.current = qrScanner; // Store in ref
-          console.log('[Feedback QR] ✅ Html5Qrcode instance created');
-          
-          toast.loading('Requesting camera access...', { id: 'camera-init' });
-          
-          console.log('[Feedback QR] 📹 Getting available cameras...');
-          
+        const element = document.getElementById('qr-scanner');
+        if (!element) {
+          throw new Error('Scanner element not found in DOM');
+        }
+
+        console.log('[Feedback QR] ✅ Scanner element found');
+        
+        // Create scanner instance
+        qrScanner = new Html5Qrcode('qr-scanner');
+        scannerRef.current = qrScanner;
+        console.log('[Feedback QR] ✅ Html5Qrcode instance created');
+        
+        toast.loading('Requesting camera access...', { id: 'camera-init' });
+        
           // Get cameras
-          let cameras;
-          try {
-            cameras = await Html5Qrcode.getCameras();
-            console.log('[Feedback QR] ✅ Cameras found:', cameras.length);
-            cameras.forEach((cam, idx) => {
-              console.log(`  Camera ${idx}: ${cam.label} (${cam.id})`);
-            });
-          } catch (camError) {
-            console.error('[Feedback QR] ❌ Failed to get cameras:', camError);
-            
-            // Special handling for "no camera" error
-            if (camError.name === 'NotFoundError') {
-              toast.error(
-                <div className="text-left">
-                  <div className="font-bold mb-1">📷 No Camera Found</div>
-                  <div className="text-sm">This device doesn't have a camera or it's not accessible.</div>
-                  <div className="text-xs mt-2 opacity-75">
-                    💡 To test QR scanning:
-                    <br />• Use a mobile phone or tablet
-                    <br />• Or use a laptop with webcam
-                  </div>
-                </div>,
-                { id: 'camera-init', duration: 8000 }
-              );
-            } else {
-              toast.error('Failed to access camera. Please check permissions.', { id: 'camera-init' });
-            }
-            throw camError;
-          }
-          
-          if (!cameras || cameras.length === 0) {
-            toast.error('No cameras found on this device.', { id: 'camera-init' });
-            throw new Error('No cameras found');
-          }
+        const cameras = await Html5Qrcode.getCameras();
+        console.log('[Feedback QR] ✅ Cameras found:', cameras.length);
+        
+        if (!cameras || cameras.length === 0) {
+          throw new Error('No cameras found on this device');
+        }
 
-          // Select camera (prefer back/environment camera)
-          let selectedCameraId;
-          
-          // Try to find back camera
-          const backCamera = cameras.find(camera => 
-            camera.label.toLowerCase().includes('back') || 
-            camera.label.toLowerCase().includes('rear') ||
-            camera.label.toLowerCase().includes('environment')
-          );
-          
-          if (backCamera) {
-            selectedCameraId = backCamera.id;
-            console.log('[Feedback QR] 📸 Using back camera:', backCamera.label);
-          } else {
-            selectedCameraId = cameras[cameras.length > 1 ? cameras.length - 1 : 0].id;
-            console.log('[Feedback QR] 📸 Using camera:', cameras.find(c => c.id === selectedCameraId)?.label);
+        // Select camera (prefer back/environment camera)
+        const backCamera = cameras.find(camera => 
+          camera.label.toLowerCase().includes('back') || 
+          camera.label.toLowerCase().includes('rear') ||
+          camera.label.toLowerCase().includes('environment')
+        );
+        
+        const selectedCameraId = backCamera?.id || cameras[0].id;
+        console.log('[Feedback QR] 📸 Using camera:', cameras.find(c => c.id === selectedCameraId)?.label);
+        
+        // Configure scanner
+        const config = {
+          fps: 10,
+          qrbox: function(viewfinderWidth, viewfinderHeight) {
+            const qrboxSize = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.7);
+            return { width: qrboxSize, height: qrboxSize };
+          },
+          aspectRatio: 1.0,
+          disableFlip: false,
+          videoConstraints: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           }
-          
-          // Configure scanner with mobile-friendly settings
-          const config = {
-            fps: 10,
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-              const minEdgePercentage = 0.7;
-              const minEdgeSize = Math.min(viewfinderWidth, viewfinderHeight);
-              const qrboxSize = Math.floor(minEdgeSize * minEdgePercentage);
-              return {
-                width: qrboxSize,
-                height: qrboxSize
-              };
-            },
-            aspectRatio: 1.0,
-            disableFlip: false,
-            videoConstraints: {
-              facingMode: { ideal: "environment" },
-              width: { ideal: 1280 },
-              height: { ideal: 720 }
-            }
-          };
-          
-          console.log('[Feedback QR] 🎬 Starting camera...');
-          toast.loading('Starting camera...', { id: 'camera-init' });
-          
-          // Start scanning
-          await qrScanner.start(
-            selectedCameraId,
-            config,
-            handleScan,
-            handleScanError
-          );
-          
-          if (isActive) {
-            setScanner(qrScanner);
-            setIsCameraLoading(false);
-            console.log('[Feedback QR] ✅✅✅ Scanner started successfully!');
-            toast.success('📸 Camera ready! Point at stall QR code', { 
-              id: 'camera-init',
-              duration: 3000
-            });
-          } else {
-            console.log('[Feedback QR] Component unmounted during init, cleaning up');
-            try {
-              await qrScanner.stop();
-              console.log('[Feedback QR] ✅ Early cleanup: scanner stopped');
-            } catch (stopErr) {
-              console.log('[Feedback QR] Early cleanup stop error (ignored):', stopErr.message);
-            }
-            setIsCameraLoading(false);
-          }
-        } catch (error) {
-          if (!isActive) {
-            console.log('[Feedback QR] Error during cleanup, ignoring');
-            return;
-          }
-          
-          setIsCameraLoading(false);
-          toast.dismiss('camera-init');
-          console.error('[Feedback QR] ❌ Failed to initialize scanner:', error);
-          console.error('[Feedback QR] Error name:', error.name);
-          console.error('[Feedback QR] Error message:', error.message);
-          
-          // Better error messages based on error type
-          let userMessage = 'Camera error: Please check camera permissions';
-          
-          if (error.name === 'NotAllowedError') {
-            userMessage = '🚫 Camera permission denied. Please:\n1. Click the camera icon in your browser address bar\n2. Allow camera access\n3. Refresh the page';
-          } else if (error.name === 'NotFoundError') {
-            userMessage = '📷 No camera found on this device. Please ensure your device has a camera.';
-          } else if (error.name === 'NotReadableError') {
-            userMessage = '⚠️ Camera is already in use by another application. Please close other apps using the camera.';
-          } else if (error.name === 'OverconstrainedError') {
-            userMessage = '⚙️ Camera configuration error. Your camera may not support the required settings.';
-          } else if (error.name === 'SecurityError') {
-            userMessage = '🔒 Security error. Camera access requires HTTPS. Please ensure you\'re using a secure connection.';
-          } else if (error.message) {
-            userMessage = `❌ ${error.message}`;
-          }
-          
-          toast.error(userMessage, { duration: 8000 });
-          setShowScanner(false);
+        };
+        
+        console.log('[Feedback QR] 🎬 Starting camera...');
+        toast.loading('Starting camera...', { id: 'camera-init' });
+        
+        // Start scanning
+        await qrScanner.start(selectedCameraId, config, handleScan, handleScanError);
+        
+        if (!isActive) {
+          console.log('[Feedback QR] Component unmounted during init');
+          qrScanner.stop().catch(() => {});
+          scannerRef.current = null;
+          return;
+        }
+        
+        setScanner(qrScanner);
+        setIsCameraLoading(false);
+        console.log('[Feedback QR] ✅✅✅ Scanner started successfully!');
+        toast.success('📸 Camera ready! Point at stall QR code', { 
+          id: 'camera-init',
+          duration: 3000
+        });
+        
+      } catch (error) {
+        console.error('[Feedback QR] ❌ Failed to initialize scanner:', error);
+        
+        if (!isActive) return;
+        
+        setIsCameraLoading(false);
+        toast.dismiss('camera-init');
+        
+        let userMessage = 'Camera error: ' + error.message;
+        
+        if (error.name === 'NotAllowedError') {
+          userMessage = '🚫 Camera permission denied. Please allow camera access in your browser settings.';
+        } else if (error.name === 'NotFoundError') {
+          userMessage = '📷 No camera found on this device.';
+        } else if (error.name === 'NotReadableError') {
+          userMessage = '⚠️ Camera is already in use by another application.';
+        }
+        
+        toast.error(userMessage, { duration: 8000 });
+        setShowScanner(false);
+        
+        // Clean up on error
+        if (qrScanner) {
+          scannerRef.current = null;
         }
       }
     };
@@ -413,26 +368,29 @@ export default function StudentFeedback() {
 
     return () => {
       isActive = false;
-      
-      // Prevent multiple cleanup calls
-      if (isCleaningUpRef.current) {
-        console.log('[Feedback QR] Cleanup already in progress, skipping');
-        return;
-      }
-      
-      const qrScanner = scannerRef.current;
-      if (qrScanner) {
-        isCleaningUpRef.current = true;
-        console.log('[Feedback QR] 🧹 Cleanup: Component unmounting');
-        
-        // Don't call stop() during unmount - let the DOM cleanup naturally
-        // The camera stream will be released when the component unmounts
+      console.log('[Feedback QR] 🧹 Cleanup triggered');
+      // Scanner cleanup will be handled when showScanner becomes false
+    };
+  }, [showScanner, handleScan, handleScanError]);
+
+  // Separate effect to handle cleanup when scanner is closed
+  useEffect(() => {
+    return () => {
+      // This runs when component unmounts or showScanner changes to false
+      if (scannerRef.current && !showScanner) {
+        console.log('[Feedback QR] Cleaning up scanner');
+        const scanner = scannerRef.current;
         scannerRef.current = null;
-        isCleaningUpRef.current = false;
-        console.log('[Feedback QR] ✅ Cleanup complete (scanner reference cleared)');
+        
+        // Clean up async without blocking
+        setTimeout(() => {
+          scanner.stop().catch(() => {
+            console.log('[Feedback QR] Scanner already stopped');
+          });
+        }, 0);
       }
     };
-  }, [showScanner, scanner, handleScan, handleScanError]);
+  }, [showScanner]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -466,17 +424,21 @@ export default function StudentFeedback() {
     setScanValidation(null);
     setIsCameraLoading(false);
     
-    const qrScanner = scannerRef.current || scanner;
+    const qrScanner = scannerRef.current;
     if (qrScanner) {
-      try {
-        console.log('[Feedback QR] Stopping scanner...');
-        await qrScanner.stop();
-        console.log('[Feedback QR] ✅ Scanner stopped successfully');
-      } catch (err) {
-        console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
-      }
+      console.log('[Feedback QR] Stopping scanner...');
       scannerRef.current = null;
       setScanner(null);
+      
+      // Stop scanner async to not block UI
+      setTimeout(async () => {
+        try {
+          await qrScanner.stop();
+          console.log('[Feedback QR] ✅ Scanner stopped successfully');
+        } catch (err) {
+          console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
+        }
+      }, 0);
     }
     
     setShowScanner(false);
