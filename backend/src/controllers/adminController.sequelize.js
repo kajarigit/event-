@@ -838,7 +838,14 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
   try {
     const { eventId, limit = 10 } = req.query;
 
-    // Query to calculate stay time
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
+
+    // Query to calculate stay time with engagement metrics
     const results = await sequelize.query(
       `
       SELECT 
@@ -846,12 +853,20 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
         u.name,
         u."rollNumber",
         u.department,
-        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 3600 as "stayTimeHours"
+        u.email,
+        u.phone,
+        a."checkInTime",
+        a."checkOutTime",
+        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 3600 as "stayTimeHours",
+        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 60 as "stayTimeMinutes",
+        (SELECT COUNT(*) FROM votes WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalVotes",
+        (SELECT COUNT(*) FROM feedbacks WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalFeedbacks"
       FROM attendances a
       INNER JOIN users u ON a."studentId" = u.id
       WHERE a."eventId" = :eventId
         AND a."checkOutTime" IS NOT NULL
-      ORDER BY "stayTimeHours" DESC
+        AND u.role = 'student'
+      ORDER BY "stayTimeMinutes" DESC
       LIMIT :limit
       `,
       {
@@ -860,11 +875,14 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
       }
     );
 
+    console.log('[Analytics] Top students by stay time:', results.length, 'students');
+
     res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
+    console.error('[Analytics] Top students error:', error);
     next(error);
   }
 };
@@ -909,36 +927,53 @@ exports.getMostReviewers = async (req, res, next) => {
 
 exports.getTopStallsByVotes = async (req, res, next) => {
   try {
-    const { eventId, limit = 10 } = req.query;
+    const { eventId, limit = 10, department } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
+
+    // Build department filter
+    const deptFilter = department ? 'AND s.department = :department' : '';
 
     const results = await sequelize.query(
       `
       SELECT 
         s.id,
         s.name,
+        s.department,
         s.category,
         s."ownerName",
-        COUNT(v.id) as "voteCount",
-        COALESCE(AVG(f.rating), 0) as "avgRating"
+        s."ownerContact",
+        COUNT(DISTINCT v.id) as "voteCount",
+        COUNT(DISTINCT f.id) as "feedbackCount",
+        COALESCE(AVG(f.rating), 0) as "avgRating",
+        ROUND(COALESCE(AVG(f.rating), 0), 1) as "roundedRating"
       FROM stalls s
-      LEFT JOIN votes v ON v."stallId" = s.id
-      LEFT JOIN feedbacks f ON f."stallId" = s.id
-      WHERE s."eventId" = :eventId
-      GROUP BY s.id, s.name, s.category, s."ownerName"
-      ORDER BY "voteCount" DESC, "avgRating" DESC
+      LEFT JOIN votes v ON v."stallId" = s.id AND v."eventId" = :eventId
+      LEFT JOIN feedbacks f ON f."stallId" = s.id AND f."eventId" = :eventId
+      WHERE s."eventId" = :eventId ${deptFilter}
+      GROUP BY s.id, s.name, s.department, s.category, s."ownerName", s."ownerContact"
+      ORDER BY "voteCount" DESC, "avgRating" DESC, "feedbackCount" DESC
       LIMIT :limit
       `,
       {
-        replacements: { eventId, limit: parseInt(limit) },
+        replacements: { eventId, department, limit: parseInt(limit) },
         type: QueryTypes.SELECT,
       }
     );
+
+    console.log('[Analytics] Top stalls by votes:', results.length, department ? `for ${department}` : 'all departments');
 
     res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
+    console.error('[Analytics] Top stalls error:', error);
     next(error);
   }
 };
@@ -947,20 +982,36 @@ exports.getDepartmentStats = async (req, res, next) => {
   try {
     const { eventId } = req.query;
 
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
+
+    // Get comprehensive department-wise statistics with attendance percentage
     const results = await sequelize.query(
       `
       SELECT 
         u.department,
-        COUNT(DISTINCT a."studentId") as "attendanceCount",
-        COUNT(DISTINCT v."studentId") as "voteCount",
-        COUNT(DISTINCT f."studentId") as "feedbackCount"
+        COUNT(DISTINCT CASE WHEN u.role = 'student' THEN u.id END) as "totalStudents",
+        COUNT(DISTINCT a."studentId") as "attendedStudents",
+        ROUND(
+          (COUNT(DISTINCT a."studentId")::decimal / 
+          NULLIF(COUNT(DISTINCT CASE WHEN u.role = 'student' THEN u.id END), 0) * 100), 
+          2
+        ) as "attendancePercentage",
+        COUNT(DISTINCT v."studentId") as "studentsWhoVoted",
+        COUNT(DISTINCT f."studentId") as "studentsWhoFeedback",
+        COUNT(DISTINCT v.id) as "totalVotes",
+        COUNT(DISTINCT f.id) as "totalFeedbacks"
       FROM users u
       LEFT JOIN attendances a ON a."studentId" = u.id AND a."eventId" = :eventId
       LEFT JOIN votes v ON v."studentId" = u.id AND v."eventId" = :eventId
       LEFT JOIN feedbacks f ON f."studentId" = u.id AND f."eventId" = :eventId
       WHERE u.role = 'student' AND u.department IS NOT NULL
       GROUP BY u.department
-      ORDER BY "attendanceCount" DESC
+      ORDER BY "attendancePercentage" DESC, "totalStudents" DESC
       `,
       {
         replacements: { eventId },
@@ -968,11 +1019,14 @@ exports.getDepartmentStats = async (req, res, next) => {
       }
     );
 
+    console.log('[Analytics] Department stats calculated:', results.length, 'departments');
+
     res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
+    console.error('[Analytics] Department stats error:', error);
     next(error);
   }
 };
@@ -1222,6 +1276,489 @@ exports.refreshAllStallStats = async (req, res, next) => {
     });
   } catch (error) {
     console.error('[Admin] Error refreshing stall stats:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Export comprehensive analytics as Excel file with multiple sheets
+ * @route   GET /api/admin/analytics/export-comprehensive
+ * @access  Private (Admin)
+ */
+exports.exportComprehensiveAnalytics = async (req, res, next) => {
+  try {
+    const { eventId } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required for analytics export',
+      });
+    }
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+
+    // Get event details
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    console.log('[Analytics Export] Generating comprehensive report for:', event.name);
+
+    // ===== SHEET 1: Top 10 Stalls by Department (Voting Prizes) =====
+    const topStallsSheet = workbook.addWorksheet('Top 10 Stalls by Department');
+    topStallsSheet.columns = [
+      { header: 'Rank', key: 'rank', width: 8 },
+      { header: 'Department', key: 'department', width: 40 },
+      { header: 'Stall Name', key: 'name', width: 35 },
+      { header: 'Category', key: 'category', width: 20 },
+      { header: 'Owner Name', key: 'ownerName', width: 25 },
+      { header: 'Contact', key: 'ownerContact', width: 15 },
+      { header: 'Total Votes', key: 'voteCount', width: 12 },
+      { header: 'Total Feedbacks', key: 'feedbackCount', width: 15 },
+      { header: 'Avg Rating', key: 'avgRating', width: 12 },
+      { header: 'Prize Category', key: 'prize', width: 20 },
+    ];
+
+    const departments = await sequelize.query(
+      `SELECT DISTINCT department FROM stalls WHERE "eventId" = :eventId AND department IS NOT NULL ORDER BY department`,
+      { replacements: { eventId }, type: QueryTypes.SELECT }
+    );
+
+    for (const dept of departments) {
+      const topStalls = await sequelize.query(
+        `
+        SELECT 
+          s.name,
+          s.department,
+          s.category,
+          s."ownerName",
+          s."ownerContact",
+          COUNT(DISTINCT v.id) as "voteCount",
+          COUNT(DISTINCT f.id) as "feedbackCount",
+          COALESCE(ROUND(AVG(f.rating), 1), 0) as "avgRating"
+        FROM stalls s
+        LEFT JOIN votes v ON v."stallId" = s.id AND v."eventId" = :eventId
+        LEFT JOIN feedbacks f ON f."stallId" = s.id AND f."eventId" = :eventId
+        WHERE s."eventId" = :eventId AND s.department = :department
+        GROUP BY s.id, s.name, s.department, s.category, s."ownerName", s."ownerContact"
+        ORDER BY "voteCount" DESC, "avgRating" DESC
+        LIMIT 10
+        `,
+        { replacements: { eventId, department: dept.department }, type: QueryTypes.SELECT }
+      );
+
+      topStalls.forEach((stall, index) => {
+        const rank = index + 1;
+        let prize = '';
+        if (rank === 1) prize = '🥇 1st Prize';
+        else if (rank === 2) prize = '🥈 2nd Prize';
+        else if (rank === 3) prize = '🥉 3rd Prize';
+        else if (rank <= 10) prize = `Top ${rank}`;
+
+        topStallsSheet.addRow({
+          rank,
+          department: stall.department,
+          name: stall.name,
+          category: stall.category,
+          ownerName: stall.ownerName,
+          ownerContact: stall.ownerContact,
+          voteCount: parseInt(stall.voteCount),
+          feedbackCount: parseInt(stall.feedbackCount),
+          avgRating: parseFloat(stall.avgRating),
+          prize,
+        });
+      });
+
+      // Add empty row between departments
+      topStallsSheet.addRow({});
+    }
+
+    // Style header
+    topStallsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    topStallsSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF4472C4' }
+    };
+    topStallsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 2: Top 50 Students by Engagement Time (Engagement Prizes) =====
+    const topStudentsSheet = workbook.addWorksheet('Top 50 Students by Engagement');
+    topStudentsSheet.columns = [
+      { header: 'Rank', key: 'rank', width: 8 },
+      { header: 'Student Name', key: 'name', width: 30 },
+      { header: 'Roll Number', key: 'rollNumber', width: 15 },
+      { header: 'Department', key: 'department', width: 40 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Phone', key: 'phone', width: 15 },
+      { header: 'Check-In Time', key: 'checkInTime', width: 20 },
+      { header: 'Check-Out Time', key: 'checkOutTime', width: 20 },
+      { header: 'Stay (Hours)', key: 'stayTimeHours', width: 15 },
+      { header: 'Stay (Minutes)', key: 'stayTimeMinutes', width: 15 },
+      { header: 'Votes Given', key: 'totalVotes', width: 12 },
+      { header: 'Feedbacks Given', key: 'totalFeedbacks', width: 15 },
+      { header: 'Engagement Score', key: 'engagementScore', width: 18 },
+      { header: 'Prize Category', key: 'prize', width: 20 },
+    ];
+
+    const topStudents = await sequelize.query(
+      `
+      SELECT 
+        u.id,
+        u.name,
+        u."rollNumber",
+        u.department,
+        u.email,
+        u.phone,
+        a."checkInTime",
+        a."checkOutTime",
+        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 3600 as "stayTimeHours",
+        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 60 as "stayTimeMinutes",
+        (SELECT COUNT(*) FROM votes WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalVotes",
+        (SELECT COUNT(*) FROM feedbacks WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalFeedbacks"
+      FROM attendances a
+      INNER JOIN users u ON a."studentId" = u.id
+      WHERE a."eventId" = :eventId
+        AND a."checkOutTime" IS NOT NULL
+        AND u.role = 'student'
+      ORDER BY "stayTimeMinutes" DESC
+      LIMIT 50
+      `,
+      { replacements: { eventId }, type: QueryTypes.SELECT }
+    );
+
+    topStudents.forEach((student, index) => {
+      const rank = index + 1;
+      const engagementScore = Math.round(
+        parseFloat(student.stayTimeHours) * 10 +
+        parseInt(student.totalVotes) * 5 +
+        parseInt(student.totalFeedbacks) * 3
+      );
+
+      let prize = '';
+      if (rank === 1) prize = '🥇 1st Prize';
+      else if (rank === 2) prize = '🥈 2nd Prize';
+      else if (rank === 3) prize = '🥉 3rd Prize';
+      else if (rank <= 10) prize = `Top ${rank}`;
+
+      topStudentsSheet.addRow({
+        rank,
+        name: student.name,
+        rollNumber: student.rollNumber,
+        department: student.department,
+        email: student.email,
+        phone: student.phone,
+        checkInTime: new Date(student.checkInTime).toLocaleString(),
+        checkOutTime: new Date(student.checkOutTime).toLocaleString(),
+        stayTimeHours: parseFloat(student.stayTimeHours).toFixed(2),
+        stayTimeMinutes: Math.round(parseFloat(student.stayTimeMinutes)),
+        totalVotes: parseInt(student.totalVotes),
+        totalFeedbacks: parseInt(student.totalFeedbacks),
+        engagementScore,
+        prize,
+      });
+    });
+
+    topStudentsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    topStudentsSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF70AD47' }
+    };
+    topStudentsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 3: Department-wise Attendance Statistics (Prize Distribution Proof) =====
+    const deptStatsSheet = workbook.addWorksheet('Department Attendance Stats');
+    deptStatsSheet.columns = [
+      { header: 'Department', key: 'department', width: 45 },
+      { header: 'Total Students', key: 'totalStudents', width: 15 },
+      { header: 'Students Attended', key: 'attendedStudents', width: 18 },
+      { header: 'Attendance %', key: 'attendancePercentage', width: 15 },
+      { header: 'Students Voted', key: 'studentsWhoVoted', width: 18 },
+      { header: 'Students Feedback', key: 'studentsWhoFeedback', width: 20 },
+      { header: 'Total Votes', key: 'totalVotes', width: 12 },
+      { header: 'Total Feedbacks', key: 'totalFeedbacks', width: 15 },
+      { header: 'Engagement Rank', key: 'rank', width: 15 },
+    ];
+
+    const deptStats = await sequelize.query(
+      `
+      SELECT 
+        u.department,
+        COUNT(DISTINCT CASE WHEN u.role = 'student' THEN u.id END) as "totalStudents",
+        COUNT(DISTINCT a."studentId") as "attendedStudents",
+        ROUND(
+          (COUNT(DISTINCT a."studentId")::decimal / 
+          NULLIF(COUNT(DISTINCT CASE WHEN u.role = 'student' THEN u.id END), 0) * 100), 
+          2
+        ) as "attendancePercentage",
+        COUNT(DISTINCT v."studentId") as "studentsWhoVoted",
+        COUNT(DISTINCT f."studentId") as "studentsWhoFeedback",
+        COUNT(DISTINCT v.id) as "totalVotes",
+        COUNT(DISTINCT f.id) as "totalFeedbacks"
+      FROM users u
+      LEFT JOIN attendances a ON a."studentId" = u.id AND a."eventId" = :eventId
+      LEFT JOIN votes v ON v."studentId" = u.id AND v."eventId" = :eventId
+      LEFT JOIN feedbacks f ON f."studentId" = u.id AND f."eventId" = :eventId
+      WHERE u.role = 'student' AND u.department IS NOT NULL
+      GROUP BY u.department
+      ORDER BY "attendancePercentage" DESC, "totalStudents" DESC
+      `,
+      { replacements: { eventId }, type: QueryTypes.SELECT }
+    );
+
+    deptStats.forEach((dept, index) => {
+      deptStatsSheet.addRow({
+        department: dept.department,
+        totalStudents: parseInt(dept.totalStudents),
+        attendedStudents: parseInt(dept.attendedStudents),
+        attendancePercentage: parseFloat(dept.attendancePercentage).toFixed(2) + '%',
+        studentsWhoVoted: parseInt(dept.studentsWhoVoted),
+        studentsWhoFeedback: parseInt(dept.studentsWhoFeedback),
+        totalVotes: parseInt(dept.totalVotes),
+        totalFeedbacks: parseInt(dept.totalFeedbacks),
+        rank: index + 1,
+      });
+    });
+
+    deptStatsSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    deptStatsSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFFFC000' }
+    };
+    deptStatsSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 4: All Votes Detail (Complete Proof) =====
+    const votesSheet = workbook.addWorksheet('All Votes Detail');
+    votesSheet.columns = [
+      { header: '#', key: 'sno', width: 8 },
+      { header: 'Vote ID', key: 'id', width: 40 },
+      { header: 'Student Name', key: 'studentName', width: 30 },
+      { header: 'Roll Number', key: 'rollNumber', width: 15 },
+      { header: 'Student Dept', key: 'studentDept', width: 40 },
+      { header: 'Stall Name', key: 'stallName', width: 35 },
+      { header: 'Stall Dept', key: 'stallDepartment', width: 40 },
+      { header: 'Voted At', key: 'createdAt', width: 20 },
+    ];
+
+    const votes = await Vote.findAll({
+      where: { eventId },
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['name', 'rollNumber', 'department'],
+        },
+        {
+          model: Stall,
+          as: 'stall',
+          attributes: ['name', 'department'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    votes.forEach((vote, index) => {
+      votesSheet.addRow({
+        sno: index + 1,
+        id: vote.id,
+        studentName: vote.student?.name || 'Unknown',
+        rollNumber: vote.student?.rollNumber || 'N/A',
+        studentDept: vote.student?.department || 'N/A',
+        stallName: vote.stall?.name || 'Unknown',
+        stallDepartment: vote.stall?.department || 'N/A',
+        createdAt: new Date(vote.createdAt).toLocaleString(),
+      });
+    });
+
+    votesSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    votesSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FFED7D31' }
+    };
+    votesSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 5: All Feedbacks Detail (Complete Proof) =====
+    const feedbacksSheet = workbook.addWorksheet('All Feedbacks Detail');
+    feedbacksSheet.columns = [
+      { header: '#', key: 'sno', width: 8 },
+      { header: 'Feedback ID', key: 'id', width: 40 },
+      { header: 'Student Name', key: 'studentName', width: 30 },
+      { header: 'Roll Number', key: 'rollNumber', width: 15 },
+      { header: 'Student Dept', key: 'studentDept', width: 40 },
+      { header: 'Stall Name', key: 'stallName', width: 35 },
+      { header: 'Stall Dept', key: 'stallDept', width: 40 },
+      { header: 'Rating (1-5)', key: 'rating', width: 12 },
+      { header: 'Comment', key: 'comment', width: 60 },
+      { header: 'Submitted At', key: 'createdAt', width: 20 },
+    ];
+
+    const feedbacks = await Feedback.findAll({
+      where: { eventId },
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['name', 'rollNumber', 'department'],
+        },
+        {
+          model: Stall,
+          as: 'stall',
+          attributes: ['name', 'department'],
+        },
+      ],
+      order: [['createdAt', 'DESC']],
+    });
+
+    feedbacks.forEach((feedback, index) => {
+      feedbacksSheet.addRow({
+        sno: index + 1,
+        id: feedback.id,
+        studentName: feedback.student?.name || 'Unknown',
+        rollNumber: feedback.student?.rollNumber || 'N/A',
+        studentDept: feedback.student?.department || 'N/A',
+        stallName: feedback.stall?.name || 'Unknown',
+        stallDept: feedback.stall?.department || 'N/A',
+        rating: feedback.rating,
+        comment: feedback.comments || 'No comment',
+        createdAt: new Date(feedback.createdAt).toLocaleString(),
+      });
+    });
+
+    feedbacksSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    feedbacksSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF5B9BD5' }
+    };
+    feedbacksSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 6: All Attendances Detail (Complete Proof) =====
+    const attendancesSheet = workbook.addWorksheet('All Attendances Detail');
+    attendancesSheet.columns = [
+      { header: '#', key: 'sno', width: 8 },
+      { header: 'Student Name', key: 'studentName', width: 30 },
+      { header: 'Roll Number', key: 'rollNumber', width: 15 },
+      { header: 'Department', key: 'department', width: 40 },
+      { header: 'Check-In', key: 'checkInTime', width: 20 },
+      { header: 'Check-Out', key: 'checkOutTime', width: 20 },
+      { header: 'Duration (Minutes)', key: 'duration', width: 18 },
+      { header: 'Status', key: 'status', width: 15 },
+    ];
+
+    const attendances = await Attendance.findAll({
+      where: { eventId },
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['name', 'rollNumber', 'department'],
+        },
+      ],
+      order: [['checkInTime', 'DESC']],
+    });
+
+    attendances.forEach((attendance, index) => {
+      let duration = 0;
+      if (attendance.checkOutTime && attendance.checkInTime) {
+        duration = Math.round((new Date(attendance.checkOutTime) - new Date(attendance.checkInTime)) / 60000);
+      }
+
+      attendancesSheet.addRow({
+        sno: index + 1,
+        studentName: attendance.student?.name || 'Unknown',
+        rollNumber: attendance.student?.rollNumber || 'N/A',
+        department: attendance.student?.department || 'N/A',
+        checkInTime: new Date(attendance.checkInTime).toLocaleString(),
+        checkOutTime: attendance.checkOutTime ? new Date(attendance.checkOutTime).toLocaleString() : 'Still Checked In',
+        duration: duration > 0 ? duration : 'N/A',
+        status: attendance.status,
+      });
+    });
+
+    attendancesSheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    attendancesSheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF9E480E' }
+    };
+    attendancesSheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // ===== SHEET 7: Event Summary =====
+    const summarySheet = workbook.addWorksheet('Event Summary');
+    summarySheet.columns = [
+      { header: 'Metric', key: 'metric', width: 40 },
+      { header: 'Value', key: 'value', width: 20 },
+    ];
+
+    const [summary] = await sequelize.query(
+      `
+      SELECT 
+        (SELECT COUNT(*) FROM stalls WHERE "eventId" = :eventId) as "totalStalls",
+        (SELECT COUNT(DISTINCT "studentId") FROM attendances WHERE "eventId" = :eventId) as "totalAttendees",
+        (SELECT COUNT(*) FROM votes WHERE "eventId" = :eventId) as "totalVotes",
+        (SELECT COUNT(*) FROM feedbacks WHERE "eventId" = :eventId) as "totalFeedbacks",
+        (SELECT COUNT(*) FROM attendances WHERE "eventId" = :eventId AND status = 'checked-in') as "currentlyCheckedIn"
+      `,
+      { replacements: { eventId }, type: QueryTypes.SELECT }
+    );
+
+    const summaryData = [
+      { metric: 'Event Name', value: event.name },
+      { metric: 'Event Date', value: new Date(event.startDate).toLocaleDateString() },
+      { metric: 'Total Stalls', value: summary.totalStalls },
+      { metric: 'Total Students Attended', value: summary.totalAttendees },
+      { metric: 'Total Votes Cast', value: summary.totalVotes },
+      { metric: 'Total Feedbacks Submitted', value: summary.totalFeedbacks },
+      { metric: 'Currently Checked In', value: summary.currentlyCheckedIn },
+      { metric: 'Report Generated On', value: new Date().toLocaleString() },
+    ];
+
+    summaryData.forEach(item => {
+      summarySheet.addRow(item);
+    });
+
+    summarySheet.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    summarySheet.getRow(1).fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF203764' }
+    };
+    summarySheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+
+    // Make summary values bold
+    for (let i = 2; i <= summarySheet.rowCount; i++) {
+      summarySheet.getRow(i).getCell('metric').font = { bold: true };
+    }
+
+    // Set response headers for Excel download
+    const filename = `Event_Analytics_${event.name.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`
+    );
+
+    // Write to response
+    await workbook.xlsx.write(res);
+    res.end();
+
+    console.log('[Analytics Export] ✅ Comprehensive Excel report generated:', filename);
+    console.log('[Analytics Export] Sheets:', workbook.worksheets.map(ws => ws.name).join(', '));
+  } catch (error) {
+    console.error('[Analytics Export] Error generating report:', error);
     next(error);
   }
 };

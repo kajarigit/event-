@@ -148,6 +148,7 @@ export const adminApi = {
   getTopStalls: (params) => api.get('/admin/analytics/top-stalls', { params }),
   getDepartmentStats: (params) => api.get('/admin/analytics/department-stats', { params }),
   getEventOverview: (params) => api.get('/admin/analytics/event-overview', { params }),
+  exportComprehensiveAnalytics: (params) => api.get('/admin/analytics/export-comprehensive', { params, responseType: 'blob' }),
 
   // Reports
   exportAttendance: (params) => api.get('/admin/reports/attendance', { params, responseType: 'blob' }),
@@ -158,3 +159,15 @@ export const adminApi = {
   updateAttendance: (id, data) => api.put(`/admin/attendances/${id}`, data),
   deleteAttendance: (id) => api.delete(`/admin/attendances/${id}`),
 };
+
+// Stall Owner API
+export const stallOwnerApi = {
+  login: (email, password) => api.post('/stall-owner/login', { email, password }),
+  getMyStall: () => api.get('/stall-owner/my-stall'),
+  getDepartmentLeaderboard: () => api.get('/stall-owner/department-leaderboard'),
+  getLiveVotes: (params) => api.get('/stall-owner/live-votes', { params }),
+  getLiveFeedbacks: (params) => api.get('/stall-owner/live-feedbacks', { params }),
+  getCompetitionStats: () => api.get('/stall-owner/competition-stats'),
+  getRecentActivity: (params) => api.get('/stall-owner/recent-activity', { params }),
+};
+

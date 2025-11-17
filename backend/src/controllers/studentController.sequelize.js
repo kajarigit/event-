@@ -40,6 +40,16 @@ exports.getEvents = async (req, res, next) => {
 exports.getStalls = async (req, res, next) => {
   try {
     const { eventId, isActive } = req.query;
+    const studentId = req.user.id;
+
+    // Get student details with department for filtering
+    const student = await User.findByPk(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found',
+      });
+    }
 
     const where = {};
     if (eventId) {
@@ -48,6 +58,9 @@ exports.getStalls = async (req, res, next) => {
     if (isActive !== undefined) {
       where.isActive = isActive === 'true';
     }
+
+    // DEPARTMENT FILTER: Only show stalls from student's own department for voting
+    where.department = student.department;
 
     const stalls = await Stall.findAll({
       where,
@@ -60,6 +73,8 @@ exports.getStalls = async (req, res, next) => {
       ],
       order: [['name', 'ASC']],
     });
+
+    console.log(`[Student Stalls] Showing ${stalls.length} stalls from ${student.department} department for student ${student.name}`);
 
     res.status(200).json({
       success: true,
@@ -189,6 +204,36 @@ exports.submitFeedback = async (req, res, next) => {
       rating,
       comments,
     });
+
+    // Update stall statistics after feedback submission
+    try {
+      const feedbackStats = await Feedback.findAll({
+        where: { stallId: stall.id },
+        attributes: [
+          [sequelize.fn('COUNT', sequelize.col('id')), 'totalFeedbacks'],
+          [sequelize.fn('AVG', sequelize.col('rating')), 'averageRating'],
+        ],
+        raw: true,
+      });
+
+      if (feedbackStats.length > 0 && feedbackStats[0].totalFeedbacks > 0) {
+        const totalFeedbacks = parseInt(feedbackStats[0].totalFeedbacks);
+        const averageRating = parseFloat(feedbackStats[0].averageRating);
+
+        await stall.update({
+          stats: {
+            ...stall.stats,
+            totalFeedbacks: totalFeedbacks,
+            averageRating: Math.round(averageRating * 10) / 10,
+          },
+        });
+
+        console.log(`[Feedback] Updated stats for ${stall.name}: ${totalFeedbacks} feedbacks, ${Math.round(averageRating * 10) / 10} avg rating`);
+      }
+    } catch (statsError) {
+      console.error('[Feedback] Error updating stall stats:', statsError);
+      // Don't fail the request if stats update fails
+    }
 
     res.status(201).json({
       success: true,

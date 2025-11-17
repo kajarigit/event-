@@ -58,6 +58,7 @@ router.get('/analytics/most-reviewers', adminController.getMostReviewers);
 router.get('/analytics/top-stalls', adminController.getTopStallsByVotes);
 router.get('/analytics/department-stats', adminController.getDepartmentStats);
 router.get('/analytics/event-overview', adminController.getEventOverview);
+router.get('/analytics/export-comprehensive', adminController.exportComprehensiveAnalytics);
 
 // Reports (CSV Export)
 router.get('/reports/attendance', adminController.exportAttendanceReport);

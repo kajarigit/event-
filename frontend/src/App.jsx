@@ -8,6 +8,8 @@ import ForgotPassword from './pages/Auth/ForgotPassword';
 import StudentDashboard from './pages/Student/Dashboard';
 import VolunteerDashboard from './pages/Volunteer/Dashboard';
 import AdminDashboard from './pages/Admin/Dashboard';
+import StallOwnerLogin from './pages/StallOwner/Login';
+import StallOwnerDashboard from './pages/StallOwner/Dashboard';
 import NotFound from './pages/NotFound';
 
 // Protected Route Component
@@ -41,6 +43,8 @@ function App() {
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" /> : <Login />} />
         <Route path="/forgot-password" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
+        <Route path="/stall-owner/login" element={<StallOwnerLogin />} />
+        <Route path="/stall-owner/dashboard" element={<StallOwnerDashboard />} />
         
         <Route
           path="/"

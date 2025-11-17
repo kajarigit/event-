@@ -14,6 +14,7 @@ const authRoutes = require('./routes/auth');
 const scanRoutes = require('./routes/scan');
 const studentRoutes = require('./routes/student');
 const adminRoutes = require('./routes/admin');
+const stallOwnerRoutes = require('./routes/stallOwner');
 
 // Create Express app
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/scan', scanRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/stall-owner', stallOwnerRoutes);
 
 // 404 handler
 app.use((req, res) => {
