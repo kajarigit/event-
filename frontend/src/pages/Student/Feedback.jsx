@@ -226,12 +226,9 @@ export default function StudentFeedback() {
     let isActive = true; // Track if component is still mounted
 
     const initScanner = () => {
-      scanner = new Html5QrcodeScanner('qr-scanner', {
+      scanner = new Html5QrcodeScanner('qr-reader', {
         fps: 10,
-        qrbox: (viewfinderWidth, viewfinderHeight) => {
-          const size = Math.min(viewfinderWidth, viewfinderHeight) * 0.7;
-          return { width: size, height: size };
-        },
+        qrbox: { width: 250, height: 250 },
         aspectRatio: 1.0,
       });
 
@@ -418,14 +415,8 @@ export default function StudentFeedback() {
                   </p>
                 </div>
 
-                <div 
-                  id="qr-scanner" 
-                  className="rounded-xl overflow-hidden w-full"
-                  style={{ 
-                    minHeight: '300px', 
-                    maxWidth: '100%'
-                  }}
-                ></div>
+                <div id="qr-reader" className="mb-4"></div>
+                
                 <button
                   onClick={cancelScan}
                   className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
