@@ -56,6 +56,11 @@ const Stall = sequelize.define('Stall', {
       isEmail: true
     }
   },
+  ownerPassword: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Password for stall owner dashboard access'
+  },
   department: {
     type: DataTypes.STRING,
     allowNull: true

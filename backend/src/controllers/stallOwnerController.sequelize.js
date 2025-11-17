@@ -3,24 +3,23 @@ const { generateAccessToken, generateRefreshToken } = require('../utils/jwt');
 const QRCode = require('qrcode');
 
 /**
- * @desc    Stall owner login (using email/phone)
+ * @desc    Stall owner login (using Stall ID + password)
  * @route   POST /api/stall-owner/login
  * @access  Public
  */
 exports.login = async (req, res, next) => {
   try {
-    const { email, password, eventId } = req.body;
+    const { stallId, password } = req.body;
 
-    if (!email || !password) {
+    if (!stallId || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email and password',
+        message: 'Please provide Stall ID and password',
       });
     }
 
-    // Find stall by owner email
-    const stall = await Stall.findOne({
-      where: { ownerEmail: email },
+    // Find stall by ID
+    const stall = await Stall.findByPk(stallId, {
       include: [
         {
           model: Event,
@@ -33,17 +32,15 @@ exports.login = async (req, res, next) => {
     if (!stall) {
       return res.status(404).json({
         success: false,
-        message: 'No stall found with this email',
+        message: 'Invalid Stall ID or password',
       });
     }
 
-    // For stall owners, we'll use a simple password check
-    // In production, you'd want to hash these passwords
-    // For now, using ownerContact as password (or implement proper password field)
-    if (password !== stall.ownerContact) {
+    // Check password
+    if (!stall.ownerPassword || password !== stall.ownerPassword) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid credentials',
+        message: 'Invalid Stall ID or password',
       });
     }
 

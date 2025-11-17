@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stallOwnerController = require('../controllers/stallOwnerController.sequelize');
-const { protect } = require('../middlewares/auth');
+const { protect } = require('../middleware/auth');
 
 // Public routes
 router.post('/login', stallOwnerController.login);

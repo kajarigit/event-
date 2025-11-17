@@ -2,13 +2,14 @@ const { Event, Stall, User, Attendance, Feedback, Vote, ScanLog, sequelize } = r
 const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
 const { generateRandomPassword } = require('../utils/passwordGenerator');
-const { sendWelcomeEmail, sendStallQRCode } = require('../utils/emailService');
+const { sendWelcomeEmail, sendStallQRCode, sendStallOwnerCredentials } = require('../utils/emailService');
 const { normalizeDepartment, normalizeString, normalizeEmail } = require('../utils/normalization');
 const QRCode = require('qrcode');
 const Papa = require('papaparse');
 const fs = require('fs').promises;
 const { Op } = require('sequelize');
 const { QueryTypes } = require('sequelize');
+const crypto = require('crypto');
 
 /**
  * EVENTS
@@ -321,6 +322,14 @@ exports.createStall = async (req, res, next) => {
 
     const stall = await Stall.create(stallData);
 
+    // Generate a secure random password for stall owner dashboard
+    const password = crypto.randomBytes(4).toString('hex'); // 8 character random password
+
+    // Store password in stall (you may want to add a password field to Stall model)
+    // For now, we'll use ownerContact as password field or add a new field
+    stall.ownerPassword = password; // Store hashed in production
+    await stall.save();
+
     // Generate QR token with actual stall ID
     let qrData = null;
     if (stall.eventId) {
@@ -333,7 +342,7 @@ exports.createStall = async (req, res, next) => {
       await stall.save();
     }
 
-    // Send QR code email if ownerEmail is provided
+    // Send credentials and QR code email if ownerEmail is provided
     if (stall.ownerEmail && qrData) {
       try {
         // Get event details
@@ -341,7 +350,7 @@ exports.createStall = async (req, res, next) => {
         
         // Generate QR code as data URL using qrData (not token)
         const qrCodeDataURL = await QRCode.toDataURL(qrData, {
-          width: 300,
+          width: 400,
           margin: 2,
           color: {
             dark: '#000000',
@@ -349,11 +358,11 @@ exports.createStall = async (req, res, next) => {
           }
         });
 
-        // Send email with QR code
-        await sendStallQRCode(stall, qrCodeDataURL, event);
-        console.log(`✅ Stall QR email sent to ${stall.ownerEmail}`);
+        // Send comprehensive email with credentials and QR code
+        await sendStallOwnerCredentials(stall, qrCodeDataURL, event, password);
+        console.log(`✅ Stall owner credentials and QR sent to ${stall.ownerEmail}`);
       } catch (emailError) {
-        console.error(`❌ Failed to send stall QR email:`, emailError.message);
+        console.error(`❌ Failed to send stall credentials email:`, emailError.message);
         // Continue even if email fails
       }
     }
@@ -361,9 +370,19 @@ exports.createStall = async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: stall.ownerEmail 
-        ? 'Stall created successfully. QR code has been sent to the owner\'s email.' 
+        ? 'Stall created successfully. Login credentials and QR code have been sent to the owner\'s email.' 
         : 'Stall created successfully.',
-      data: stall,
+      data: {
+        ...stall.toJSON(),
+        // Include password in response for admin (remove in production or use different endpoint)
+        temporaryPassword: password,
+        dashboardLoginUrl: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/stall-owner/login`,
+        loginInstructions: {
+          username: stall.id,
+          password: password,
+          note: 'These credentials have been sent to the owner\'s email'
+        }
+      },
     });
   } catch (error) {
     next(error);

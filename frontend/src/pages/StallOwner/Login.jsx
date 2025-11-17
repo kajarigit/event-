@@ -8,12 +8,12 @@ import { Store, Mail, Lock, LogIn, TrendingUp } from 'lucide-react';
 export default function StallOwnerLogin() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    email: '',
+    stallId: '',
     password: '',
   });
 
   const loginMutation = useMutation({
-    mutationFn: ({ email, password }) => stallOwnerApi.login(email, password),
+    mutationFn: ({ stallId, password }) => stallOwnerApi.login(stallId, password),
     onSuccess: (response) => {
       const { accessToken, refreshToken, stall } = response.data.data;
       
@@ -34,7 +34,7 @@ export default function StallOwnerLogin() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    if (!formData.email || !formData.password) {
+    if (!formData.stallId || !formData.password) {
       toast.error('Please fill in all fields');
       return;
     }
@@ -70,21 +70,24 @@ export default function StallOwnerLogin() {
         {/* Login Card */}
         <div className="card shadow-2xl border-2 border-blue-200 dark:border-blue-700 animate-slideUp">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email */}
+            {/* Stall ID */}
             <div>
               <label className="label flex items-center gap-2">
-                <Mail size={18} className="text-blue-600 dark:text-blue-400" />
-                Email Address
+                <Store size={18} className="text-blue-600 dark:text-blue-400" />
+                Stall ID
               </label>
               <input
-                type="email"
-                name="email"
-                value={formData.email}
+                type="text"
+                name="stallId"
+                value={formData.stallId}
                 onChange={handleChange}
-                className="input-field"
-                placeholder="your.email@example.com"
+                className="input-field font-mono"
+                placeholder="e.g., abc123-def4-5678-..."
                 required
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                📧 Check your email for your Stall ID
+              </p>
             </div>
 
             {/* Password */}
@@ -98,12 +101,12 @@ export default function StallOwnerLogin() {
                 name="password"
                 value={formData.password}
                 onChange={handleChange}
-                className="input-field"
+                className="input-field font-mono"
                 placeholder="Enter your password"
                 required
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                💡 Use your contact number as password
+                � Password was sent to your email when stall was created
               </p>
             </div>
 
