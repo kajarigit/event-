@@ -193,10 +193,9 @@ export default function StudentFeedback() {
       if (scanner) {
         try {
           await scanner.stop();
-          await scanner.clear();
-          console.log('[Feedback QR] Scanner stopped after successful scan');
+          console.log('[Feedback QR] ✅ Scanner stopped after successful scan');
         } catch (err) {
-          console.log('[Feedback QR] Error stopping scanner:', err.message);
+          console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
         }
         setScanner(null);
       }
@@ -363,18 +362,26 @@ export default function StudentFeedback() {
               duration: 3000
             });
           } else {
-            console.log('[Feedback QR] Component unmounted, stopping scanner');
-            await qrScanner.stop();
-            await qrScanner.clear();
+            console.log('[Feedback QR] Component unmounted during init, cleaning up');
+            try {
+              await qrScanner.stop();
+              console.log('[Feedback QR] ✅ Early cleanup: scanner stopped');
+            } catch (stopErr) {
+              console.log('[Feedback QR] Early cleanup stop error (ignored):', stopErr.message);
+            }
             setIsCameraLoading(false);
           }
         } catch (error) {
+          if (!isActive) {
+            console.log('[Feedback QR] Error during cleanup, ignoring');
+            return;
+          }
+          
           setIsCameraLoading(false);
           toast.dismiss('camera-init');
           console.error('[Feedback QR] ❌ Failed to initialize scanner:', error);
           console.error('[Feedback QR] Error name:', error.name);
           console.error('[Feedback QR] Error message:', error.message);
-          console.error('[Feedback QR] Error stack:', error.stack);
           
           // Better error messages based on error type
           let userMessage = 'Camera error: Please check camera permissions';
@@ -404,24 +411,12 @@ export default function StudentFeedback() {
     return () => {
       isActive = false;
       if (qrScanner) {
-        console.log('[Feedback QR] 🧹 Cleaning up scanner...');
-        // Wrap in try-catch to prevent React errors during cleanup
-        try {
-          qrScanner.stop()
-            .then(() => {
-              console.log('[Feedback QR] ✅ Scanner stopped successfully');
-              try {
-                qrScanner.clear();
-              } catch (clearErr) {
-                console.log('[Feedback QR] ⚠️ Clear error (safe to ignore):', clearErr.message);
-              }
-            })
-            .catch((err) => {
-              console.log('[Feedback QR] ⚠️ Stop error (safe to ignore):', err.message);
-            });
-        } catch (err) {
-          console.log('[Feedback QR] ⚠️ Cleanup error (safe to ignore):', err.message);
-        }
+        console.log('[Feedback QR] 🧹 Cleanup: Stopping scanner');
+        // Just stop the camera, don't call clear() to avoid DOM conflicts with React
+        qrScanner.stop().catch((err) => {
+          // Ignore all errors during cleanup - component is unmounting anyway
+          console.log('[Feedback QR] ℹ️ Cleanup stopped (component unmounting)');
+        });
       }
     };
   }, [showScanner, scanner, handleScan, handleScanError]);
@@ -462,19 +457,9 @@ export default function StudentFeedback() {
       try {
         console.log('[Feedback QR] Stopping scanner...');
         await scanner.stop();
-        console.log('[Feedback QR] Scanner stopped successfully');
-        
-        // Small delay before clearing to prevent DOM errors
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        try {
-          await scanner.clear();
-          console.log('[Feedback QR] Scanner cleared successfully');
-        } catch (clearErr) {
-          console.log('[Feedback QR] Clear error (safe to ignore):', clearErr.message);
-        }
+        console.log('[Feedback QR] ✅ Scanner stopped successfully');
       } catch (err) {
-        console.log('[Feedback QR] Stop error (safe to ignore):', err.message);
+        console.log('[Feedback QR] ℹ️ Stop error (ignored):', err.message);
       }
       setScanner(null);
     }
