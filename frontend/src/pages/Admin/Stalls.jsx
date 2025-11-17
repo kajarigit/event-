@@ -20,6 +20,8 @@ export default function Stalls() {
   const [showQRModal, setShowQRModal] = useState(false);
   const [editingStall, setEditingStall] = useState(null);
   const [selectedStall, setSelectedStall] = useState(null);
+  const [qrToken, setQrToken] = useState(null);
+  const [loadingQR, setLoadingQR] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -267,9 +269,29 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
     toast.success('Blank template downloaded!');
   };
 
-  const showQR = (stall) => {
+  const showQR = async (stall) => {
     setSelectedStall(stall);
     setShowQRModal(true);
+    setLoadingQR(true);
+    setQrToken(null);
+
+    try {
+      // Fetch/generate QR code from backend
+      const response = await adminApi.getStallQRCode(stall.id);
+      const token = response.data?.data?.qrToken || response.data?.qrToken;
+      setQrToken(token);
+      
+      // Update the stall in the list with the new token
+      queryClient.setQueryData(['adminStalls'], (old) => {
+        if (!old) return old;
+        return old.map(s => s.id === stall.id ? { ...s, qrToken: token } : s);
+      });
+    } catch (error) {
+      console.error('Error fetching QR code:', error);
+      toast.error('Failed to generate QR code');
+    } finally {
+      setLoadingQR(false);
+    }
   };
 
   const downloadQR = () => {
@@ -690,11 +712,16 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
             </div>
 
             <div className="p-6 text-center">
-              {selectedStall.qrToken ? (
+              {loadingQR ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+                  <p className="text-gray-600">Generating QR code...</p>
+                </div>
+              ) : qrToken ? (
                 <>
                   <QRCodeSVG
                     id="stall-qr-code"
-                    value={selectedStall.qrToken}
+                    value={qrToken}
                     size={300}
                     level="H"
                     includeMargin
@@ -711,7 +738,15 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                   </button>
                 </>
               ) : (
-                <p className="text-gray-500">No QR token generated for this stall</p>
+                <div className="py-8">
+                  <p className="text-gray-500 mb-4">Failed to generate QR code</p>
+                  <button
+                    onClick={() => showQR(selectedStall)}
+                    className="btn-secondary"
+                  >
+                    Retry
+                  </button>
+                </div>
               )}
             </div>
           </div>
