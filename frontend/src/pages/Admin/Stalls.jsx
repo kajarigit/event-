@@ -12,6 +12,7 @@ import {
   X,
   Store,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -174,6 +175,25 @@ export default function Stalls() {
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Bulk upload failed');
+    },
+  });
+
+  // Refresh stats mutation
+  const refreshStatsMutation = useMutation({
+    mutationFn: () => adminApi.refreshStallStats(),
+    onSuccess: (response) => {
+      const data = response.data?.data;
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Stats Refreshed!</div>
+          <div className="text-sm mt-1">Updated {data?.updatedStalls || 0} of {data?.totalStalls || 0} stalls</div>
+        </div>,
+        { duration: 4000 }
+      );
+      queryClient.invalidateQueries(['adminStalls']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to refresh stats');
     },
   });
 
@@ -424,6 +444,15 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
           >
             <Upload className="w-5 h-5" />
             <span>{bulkUploadMutation.isLoading ? 'Uploading...' : 'Bulk Upload'}</span>
+          </button>
+          <button
+            onClick={() => refreshStatsMutation.mutate()}
+            className="btn-secondary flex items-center space-x-2"
+            disabled={refreshStatsMutation.isLoading}
+            title="Refresh feedback and vote statistics for all stalls"
+          >
+            <RefreshCw className={`w-5 h-5 ${refreshStatsMutation.isLoading ? 'animate-spin' : ''}`} />
+            <span>{refreshStatsMutation.isLoading ? 'Refreshing...' : 'Refresh Stats'}</span>
           </button>
           <button onClick={openCreateModal} className="btn-primary flex items-center space-x-2">
             <Plus className="w-5 h-5" />

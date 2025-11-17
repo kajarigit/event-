@@ -130,6 +130,7 @@ export const adminApi = {
     api.post('/admin/stalls/bulk', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  refreshStallStats: () => api.post('/admin/stalls/refresh-stats'),
 
   // Users
   getUsers: (params) => api.get('/admin/users', { params }),

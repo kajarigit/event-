@@ -941,3 +941,71 @@ exports.deleteAttendance = async (req, res, next) => {
     next(error);
   }
 };
+
+/**
+ * @desc    Refresh all stall statistics
+ * @route   POST /api/admin/stalls/refresh-stats
+ * @access  Private (Admin)
+ */
+exports.refreshAllStallStats = async (req, res, next) => {
+  try {
+    const mongoose = require('mongoose');
+    const Stall = require('../models/Stall');
+    const Feedback = require('../models/Feedback');
+    
+    console.log('[Admin] Refreshing all stall stats...');
+    
+    // Get all stalls
+    const stalls = await Stall.find({});
+    console.log(`[Admin] Found ${stalls.length} stalls to update`);
+    
+    let updatedCount = 0;
+    
+    // Update each stall's stats
+    for (const stall of stalls) {
+      // Calculate feedback stats
+      const feedbackStats = await Feedback.aggregate([
+        {
+          $match: { stallId: stall._id },
+        },
+        {
+          $group: {
+            _id: null,
+            totalFeedbacks: { $sum: 1 },
+            averageRating: { $avg: '$rating' },
+          },
+        },
+      ]);
+      
+      if (feedbackStats.length > 0) {
+        stall.stats.totalFeedbacks = feedbackStats[0].totalFeedbacks;
+        stall.stats.averageRating = Math.round(feedbackStats[0].averageRating * 10) / 10;
+        await stall.save();
+        updatedCount++;
+        console.log(`[Admin] Updated ${stall.name}: ${stall.stats.totalFeedbacks} feedbacks, ${stall.stats.averageRating} avg rating`);
+      } else {
+        // Reset to 0 if no feedbacks
+        if (stall.stats.totalFeedbacks !== 0 || stall.stats.averageRating !== 0) {
+          stall.stats.totalFeedbacks = 0;
+          stall.stats.averageRating = 0;
+          await stall.save();
+          console.log(`[Admin] Reset ${stall.name}: 0 feedbacks`);
+        }
+      }
+    }
+    
+    console.log(`[Admin] Stats refresh complete. Updated ${updatedCount} stalls.`);
+    
+    res.status(200).json({
+      success: true,
+      message: `Successfully refreshed stats for ${updatedCount} stalls`,
+      data: {
+        totalStalls: stalls.length,
+        updatedStalls: updatedCount,
+      },
+    });
+  } catch (error) {
+    console.error('[Admin] Error refreshing stall stats:', error);
+    next(error);
+  }
+};

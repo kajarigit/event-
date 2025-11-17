@@ -119,9 +119,16 @@ export default function Scanner({ onScanSuccess }) {
 
     const initScanner = () => {
       scanner = new Html5QrcodeScanner('qr-reader', {
-        fps: 10,
-        qrbox: { width: 250, height: 250 },
-        aspectRatio: 1.0,
+        fps: 30, // Increased from 10 to 30 for faster scanning like Paytm
+        qrbox: undefined, // Remove box constraint - scan anywhere in camera view!
+        aspectRatio: 1.777778, // 16:9 ratio for better camera coverage
+        disableFlip: false, // Allow scanning mirrored QR codes
+        showTorchButtonIfSupported: true, // Show flashlight button on mobile
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true // Use native barcode detector for speed
+        },
+        rememberLastUsedCamera: true, // Remember camera preference
+        supportedScanTypes: [0, 1, 2], // Support QR_CODE, AZTEC, DATA_MATRIX
       });
 
       scanner.render(

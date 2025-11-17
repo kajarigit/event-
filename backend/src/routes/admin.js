@@ -42,6 +42,7 @@ router.put('/stalls/:id', adminController.updateStall);
 router.delete('/stalls/:id', adminController.deleteStall);
 router.get('/stalls/:id/qrcode', adminController.getStallQRCode);
 router.post('/stalls/bulk', upload.single('file'), adminController.bulkUploadStalls);
+router.post('/stalls/refresh-stats', adminController.refreshAllStallStats);
 
 // Users
 router.get('/users', adminController.getUsers);
