@@ -87,6 +87,11 @@ const Stall = sequelize.define('Stall', {
     },
     {
       fields: ['ownerId']
+    },
+    {
+      unique: true,
+      fields: ['eventId', 'name'],
+      name: 'unique_stall_per_event'
     }
   ]
 });

@@ -282,9 +282,32 @@ exports.createStall = async (req, res, next) => {
       isActive
     } = req.body;
 
+    // Validate required fields
+    if (!eventId || !name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID and stall name are required',
+      });
+    }
+
+    // Check for duplicate stall (same name in same event)
+    const existingStall = await Stall.findOne({
+      where: {
+        eventId,
+        name: name.trim(),
+      },
+    });
+
+    if (existingStall) {
+      return res.status(400).json({
+        success: false,
+        message: `A stall named "${name}" already exists in this event. Please use a different name.`,
+      });
+    }
+
     const stallData = {
       eventId,
-      name,
+      name: name.trim(),
       description: description || null,
       location: location || null,
       category: category || null,

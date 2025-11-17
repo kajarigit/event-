@@ -15,9 +15,15 @@ const errorHandler = (err, req, res, next) => {
 
   // Sequelize Unique Constraint Error
   if (err.name === 'SequelizeUniqueConstraintError') {
-    const field = err.errors[0]?.path || 'field';
-    const message = `Duplicate value for field: ${field}`;
-    error = { message, statusCode: 400 };
+    // Check if it's the stall duplicate error
+    if (err.errors && err.errors[0]?.path === 'unique_stall_per_event') {
+      const message = 'A stall with this name already exists in this event. Please use a different name.';
+      error = { message, statusCode: 400 };
+    } else {
+      const field = err.errors[0]?.path || 'field';
+      const message = `Duplicate value for field: ${field}`;
+      error = { message, statusCode: 400 };
+    }
   }
 
   // Sequelize Foreign Key Constraint Error
