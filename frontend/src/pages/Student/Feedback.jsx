@@ -89,36 +89,80 @@ export default function StudentFeedback() {
 
   // Initialize QR Scanner
   useEffect(() => {
-    if (showScanner && !scanner) {
-      const qrScanner = new Html5QrcodeScanner(
-        'qr-scanner',
-        { 
-          fps: 10, 
-          qrbox: { width: 250, height: 250 },
-          aspectRatio: 1.0,
-        },
-        false
-      );
+    let isActive = true;
+    let qrScanner = null;
 
-      qrScanner.render(handleScan, handleScanError);
-      setScanner(qrScanner);
-    }
+    const initScanner = async () => {
+      if (showScanner && !scanner && isActive) {
+        try {
+          // Check if element exists
+          const element = document.getElementById('qr-scanner');
+          if (!element) {
+            console.error('QR scanner element not found');
+            return;
+          }
+
+          qrScanner = new Html5QrcodeScanner(
+            'qr-scanner',
+            { 
+              fps: 10, 
+              qrbox: { width: 250, height: 250 },
+              aspectRatio: 1.0,
+              rememberLastUsedCamera: true,
+            },
+            false
+          );
+
+          console.log('QR Scanner initialized');
+          qrScanner.render(handleScan, handleScanError);
+          
+          if (isActive) {
+            setScanner(qrScanner);
+          }
+        } catch (error) {
+          console.error('Failed to initialize QR scanner:', error);
+          toast.error('Failed to start camera. Please check permissions.');
+        }
+      }
+    };
+
+    initScanner();
 
     return () => {
-      if (scanner) {
-        scanner.clear().catch(console.error);
+      isActive = false;
+      if (qrScanner) {
+        qrScanner.clear().catch((err) => {
+          console.log('Scanner cleanup error (safe to ignore):', err);
+        });
       }
     };
   }, [showScanner]);
 
   const handleScan = async (decodedText) => {
+    console.log('[Feedback QR] Raw scanned data:', decodedText);
+    
     try {
       // Parse QR code data (expected format: JSON with stallId)
       const qrData = JSON.parse(decodedText);
-      const { stallId } = qrData;
+      console.log('[Feedback QR] Parsed QR data:', qrData);
+      
+      const { stallId, eventId, type } = qrData;
+
+      // Validate QR type
+      if (type !== 'stall') {
+        toast.error('This is not a stall QR code');
+        return;
+      }
+
+      // Validate event match
+      if (eventId !== selectedEvent) {
+        toast.error('This QR code is for a different event');
+        return;
+      }
 
       // Find stall in current event's stalls
       const stall = stalls.find(s => s.id === stallId);
+      console.log('[Feedback QR] Found stall:', stall?.name || 'Not found');
       
       if (!stall) {
         toast.error('Stall not found in this event');
@@ -126,7 +170,7 @@ export default function StudentFeedback() {
       }
 
       // Check if already given feedback to this stall
-      const alreadyFeedback = myFeedbacks.find(f => f.stallId.id === stallId);
+      const alreadyFeedback = myFeedbacks.find(f => f.stallId?.id === stallId || f.stallId === stallId);
       if (alreadyFeedback) {
         toast.error('You have already submitted feedback for this stall');
         return;
@@ -136,13 +180,13 @@ export default function StudentFeedback() {
       setScannedStall(stall);
       setShowScanner(false);
       if (scanner) {
-        scanner.clear();
+        scanner.clear().catch(console.error);
         setScanner(null);
       }
       toast.success(`Scanned: ${stall.name}! Now give your feedback.`);
     } catch (error) {
-      console.error('QR Scan error:', error);
-      toast.error('Invalid QR code format');
+      console.error('[Feedback QR] Scan error:', error);
+      toast.error('Invalid QR code format. Please scan a stall QR code.');
     }
   };
 
