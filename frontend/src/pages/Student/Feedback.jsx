@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { studentApi } from '../../services/api';
 import toast from 'react-hot-toast';
@@ -88,71 +88,8 @@ export default function StudentFeedback() {
     }
   }, [events, selectedEvent]);
 
-  // Initialize QR Scanner
-  useEffect(() => {
-    let isActive = true;
-    let qrScanner = null;
-
-    const initScanner = async () => {
-      if (showScanner && !scanner && isActive) {
-        try {
-          // Wait for DOM element to be ready
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-          // Check if element exists
-          const element = document.getElementById('qr-scanner');
-          if (!element) {
-            console.error('[Feedback QR] Scanner element not found in DOM');
-            toast.error('Scanner initialization failed. Please try again.');
-            return;
-          }
-
-          console.log('[Feedback QR] Initializing scanner with mobile-optimized settings...');
-          
-          qrScanner = new Html5QrcodeScanner(
-            'qr-scanner',
-            { 
-              fps: 10, 
-              qrbox: 250, // Use number instead of object for better compatibility
-              aspectRatio: 1.777778, // 16:9 for mobile cameras
-              rememberLastUsedCamera: true,
-              showTorchButtonIfSupported: true,
-              showZoomSliderIfSupported: true,
-              defaultZoomValueIfSupported: 2,
-              supportedScanTypes: [0, 1], // Support both QR_CODE and other formats
-            },
-            false
-          );
-
-          console.log('[Feedback QR] Scanner initialized, starting render...');
-          qrScanner.render(handleScan, handleScanError);
-          
-          if (isActive) {
-            setScanner(qrScanner);
-            console.log('[Feedback QR] ✅ Scanner ready! Waiting for QR code scan...');
-          }
-        } catch (error) {
-          console.error('[Feedback QR] Failed to initialize scanner:', error);
-          toast.error(`Camera error: ${error.message || 'Please check camera permissions'}`);
-          setShowScanner(false);
-        }
-      }
-    };
-
-    initScanner();
-
-    return () => {
-      isActive = false;
-      if (qrScanner) {
-        console.log('[Feedback QR] Cleaning up scanner...');
-        qrScanner.clear().catch((err) => {
-          console.log('[Feedback QR] Cleanup error (safe to ignore):', err.message);
-        });
-      }
-    };
-  }, [showScanner]);
-
-  const handleScan = async (decodedText) => {
+  // Handle QR Scan - useCallback to prevent recreating on every render
+  const handleScan = useCallback(async (decodedText) => {
     // Prevent processing multiple scans at once
     if (isProcessingScan) {
       console.log('[Feedback QR] Already processing a scan, ignoring...');
@@ -223,15 +160,81 @@ export default function StudentFeedback() {
       toast.error('Invalid QR code format. Please scan a stall QR code.');
       setIsProcessingScan(false);
     }
-  };
+  }, [isProcessingScan, selectedEvent, stalls, myFeedbacks, scanner]);
 
-  const handleScanError = (error) => {
+  // Handle scan errors
+  const handleScanError = useCallback((error) => {
     // These are normal scanning errors, don't show to user
     // Only log at debug level to avoid console spam
     if (error && !error.includes('NotFoundException')) {
       console.debug('[Feedback QR] Scanning... Waiting for QR code');
     }
-  };
+  }, []);
+
+  // Initialize QR Scanner
+  useEffect(() => {
+    let isActive = true;
+    let qrScanner = null;
+
+    const initScanner = async () => {
+      if (showScanner && !scanner && isActive) {
+        try {
+          // Wait for DOM element to be ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          // Check if element exists
+          const element = document.getElementById('qr-scanner');
+          if (!element) {
+            console.error('[Feedback QR] Scanner element not found in DOM');
+            toast.error('Scanner initialization failed. Please try again.');
+            setShowScanner(false);
+            return;
+          }
+
+          console.log('[Feedback QR] Initializing scanner with mobile-optimized settings...');
+          
+          qrScanner = new Html5QrcodeScanner(
+            'qr-scanner',
+            { 
+              fps: 10, 
+              qrbox: 250,
+              aspectRatio: 1.777778,
+              rememberLastUsedCamera: true,
+              showTorchButtonIfSupported: true,
+              showZoomSliderIfSupported: true,
+              defaultZoomValueIfSupported: 2,
+              supportedScanTypes: [0, 1],
+            },
+            false
+          );
+
+          console.log('[Feedback QR] Scanner initialized, starting render...');
+          qrScanner.render(handleScan, handleScanError);
+          
+          if (isActive) {
+            setScanner(qrScanner);
+            console.log('[Feedback QR] ✅ Scanner ready! Waiting for QR code scan...');
+          }
+        } catch (error) {
+          console.error('[Feedback QR] Failed to initialize scanner:', error);
+          toast.error(`Camera error: ${error.message || 'Please check camera permissions'}`);
+          setShowScanner(false);
+        }
+      }
+    };
+
+    initScanner();
+
+    return () => {
+      isActive = false;
+      if (qrScanner) {
+        console.log('[Feedback QR] Cleaning up scanner...');
+        qrScanner.clear().catch((err) => {
+          console.log('[Feedback QR] Cleanup error (safe to ignore):', err.message);
+        });
+      }
+    };
+  }, [showScanner, scanner, handleScan, handleScanError]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -260,9 +263,14 @@ export default function StudentFeedback() {
   };
 
   const cancelScan = () => {
+    console.log('[Feedback QR] Cancel scan requested');
     setShowScanner(false);
+    setIsProcessingScan(false);
     if (scanner) {
-      scanner.clear();
+      console.log('[Feedback QR] Clearing scanner...');
+      scanner.clear().catch(err => {
+        console.log('[Feedback QR] Error clearing scanner:', err.message);
+      });
       setScanner(null);
     }
   };
