@@ -278,7 +278,24 @@ export default function StudentFeedback() {
             });
           } catch (camError) {
             console.error('[Feedback QR] ❌ Failed to get cameras:', camError);
-            toast.error('Failed to access camera. Please check permissions.', { id: 'camera-init' });
+            
+            // Special handling for "no camera" error
+            if (camError.name === 'NotFoundError') {
+              toast.error(
+                <div className="text-left">
+                  <div className="font-bold mb-1">📷 No Camera Found</div>
+                  <div className="text-sm">This device doesn't have a camera or it's not accessible.</div>
+                  <div className="text-xs mt-2 opacity-75">
+                    💡 To test QR scanning:
+                    <br />• Use a mobile phone or tablet
+                    <br />• Or use a laptop with webcam
+                  </div>
+                </div>,
+                { id: 'camera-init', duration: 8000 }
+              );
+            } else {
+              toast.error('Failed to access camera. Please check permissions.', { id: 'camera-init' });
+            }
             throw camError;
           }
           
@@ -388,12 +405,23 @@ export default function StudentFeedback() {
       isActive = false;
       if (qrScanner) {
         console.log('[Feedback QR] 🧹 Cleaning up scanner...');
-        qrScanner.stop().then(() => {
-          console.log('[Feedback QR] ✅ Scanner stopped successfully');
-          qrScanner.clear();
-        }).catch((err) => {
+        // Wrap in try-catch to prevent React errors during cleanup
+        try {
+          qrScanner.stop()
+            .then(() => {
+              console.log('[Feedback QR] ✅ Scanner stopped successfully');
+              try {
+                qrScanner.clear();
+              } catch (clearErr) {
+                console.log('[Feedback QR] ⚠️ Clear error (safe to ignore):', clearErr.message);
+              }
+            })
+            .catch((err) => {
+              console.log('[Feedback QR] ⚠️ Stop error (safe to ignore):', err.message);
+            });
+        } catch (err) {
           console.log('[Feedback QR] ⚠️ Cleanup error (safe to ignore):', err.message);
-        });
+        }
       }
     };
   }, [showScanner, scanner, handleScan, handleScanError]);
@@ -427,19 +455,30 @@ export default function StudentFeedback() {
   const cancelScan = async () => {
     console.log('[Feedback QR] Cancel scan requested');
     setIsProcessingScan(false);
-    setScanValidation(null); // Clear validation message
-    setIsCameraLoading(false); // Clear loading state
+    setScanValidation(null);
+    setIsCameraLoading(false);
+    
     if (scanner) {
       try {
         console.log('[Feedback QR] Stopping scanner...');
         await scanner.stop();
-        await scanner.clear();
-        console.log('[Feedback QR] Scanner stopped and cleared');
+        console.log('[Feedback QR] Scanner stopped successfully');
+        
+        // Small delay before clearing to prevent DOM errors
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        try {
+          await scanner.clear();
+          console.log('[Feedback QR] Scanner cleared successfully');
+        } catch (clearErr) {
+          console.log('[Feedback QR] Clear error (safe to ignore):', clearErr.message);
+        }
       } catch (err) {
-        console.log('[Feedback QR] Error stopping scanner:', err.message);
+        console.log('[Feedback QR] Stop error (safe to ignore):', err.message);
       }
       setScanner(null);
     }
+    
     setShowScanner(false);
   };
 
@@ -514,6 +553,11 @@ export default function StudentFeedback() {
                     ⚠️ You must check-in first to scan stall QR codes
                   </p>
                 )}
+                <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg p-3">
+                  <p className="text-xs text-blue-800 dark:text-blue-200 text-center">
+                    📱 <strong>Note:</strong> QR scanning requires a device with a camera (mobile phone, tablet, or laptop with webcam)
+                  </p>
+                </div>
               </div>
             )}
 
