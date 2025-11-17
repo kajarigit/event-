@@ -64,26 +64,81 @@ export default function Stalls() {
   // Create mutation
   const createMutation = useMutation({
     mutationFn: (data) => adminApi.createStall(data),
-    onSuccess: () => {
-      toast.success('Stall created successfully!');
+    onSuccess: (response) => {
+      const stallData = response.data?.data || response.data;
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Stall Created Successfully!</div>
+          <div className="text-sm mt-1">"{stallData?.name || 'Stall'}" has been added to the event.</div>
+          {stallData?.id && <div className="text-xs mt-1 opacity-75">ID: {stallData.id}</div>}
+        </div>,
+        {
+          duration: 4000,
+          style: {
+            background: '#10B981',
+            color: '#fff',
+          },
+        }
+      );
       queryClient.invalidateQueries(['adminStalls']);
       closeModal();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Failed to create stall');
+      const errorMessage = error.response?.data?.message || 'Failed to create stall';
+      toast.error(
+        <div>
+          <div className="font-bold">❌ Failed to Create Stall</div>
+          <div className="text-sm mt-1">{errorMessage}</div>
+        </div>,
+        {
+          duration: 5000,
+          style: {
+            background: '#EF4444',
+            color: '#fff',
+          },
+        }
+      );
+      console.error('[Stall Form] Create error:', error);
     },
   });
 
   // Update mutation
   const updateMutation = useMutation({
     mutationFn: ({ id, data }) => adminApi.updateStall(id, data),
-    onSuccess: () => {
-      toast.success('Stall updated successfully!');
+    onSuccess: (response) => {
+      const stallData = response.data?.data || response.data;
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Stall Updated Successfully!</div>
+          <div className="text-sm mt-1">"{stallData?.name || 'Stall'}" has been updated.</div>
+        </div>,
+        {
+          duration: 3000,
+          style: {
+            background: '#10B981',
+            color: '#fff',
+          },
+        }
+      );
       queryClient.invalidateQueries(['adminStalls']);
       closeModal();
     },
     onError: (error) => {
-      toast.error(error.response?.data?.message || 'Failed to update stall');
+      const errorMessage = error.response?.data?.message || 'Failed to update stall';
+      toast.error(
+        <div>
+          <div className="font-bold">❌ Failed to Update Stall</div>
+          <div className="text-sm mt-1">{errorMessage}</div>
+        </div>,
+        {
+          duration: 5000,
+          style: {
+            background: '#EF4444',
+            color: '#fff',
+          },
+        }
+      );
+      console.error('[Stall Form] Update error:', error);
     },
   });
 
@@ -198,24 +253,33 @@ export default function Stalls() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Prevent multiple submissions
+    // Prevent multiple submissions - check if already submitting
     if (createMutation.isLoading || updateMutation.isLoading) {
-      console.log('[Stall Form] Already submitting, ignoring...');
+      console.log('[Stall Form] Already submitting, ignoring duplicate click...');
+      toast.error('Please wait, your request is being processed...', { duration: 2000 });
+      return;
+    }
+    
+    // Validate required fields
+    if (!formData.eventId || !formData.name || !formData.department) {
+      toast.error('Please fill in all required fields (Event, Name, Department)');
       return;
     }
     
     const stallData = {
-      name: formData.name,
+      name: formData.name.trim(),
       department: formData.department,
-      description: formData.description,
-      location: formData.location,
-      category: formData.category,
-      ownerName: formData.ownerName,
-      ownerContact: formData.ownerContact,
-      ownerEmail: formData.ownerEmail,
+      description: formData.description.trim() || '',
+      location: formData.location.trim() || '',
+      category: formData.category.trim() || '',
+      ownerName: formData.ownerName.trim() || '',
+      ownerContact: formData.ownerContact.trim() || '',
+      ownerEmail: formData.ownerEmail.trim() || '',
       participants: formData.participants,
       eventId: formData.eventId,
     };
+    
+    console.log('[Stall Form] Submitting stall:', stallData);
     
     if (editingStall) {
       updateMutation.mutate({ id: editingStall.id, data: stallData });
@@ -387,6 +451,9 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                   <div className="flex-1">
                     <h3 className="font-semibold text-lg">{stall.name}</h3>
                     <p className="text-sm text-gray-600">{stall.department}</p>
+                    <p className="text-xs text-gray-400 font-mono mt-1" title="Unique Stall ID">
+                      ID: {stall.id}
+                    </p>
                   </div>
                   <button
                     onClick={() => showQR(stall)}
@@ -501,6 +568,11 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
             </div>
 
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Prevent any interaction during submission */}
+              {(createMutation.isLoading || updateMutation.isLoading) && (
+                <div className="absolute inset-0 z-5 cursor-not-allowed" style={{ pointerEvents: 'all' }}></div>
+              )}
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Event *
@@ -654,13 +726,18 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                       placeholder="Reg No (e.g., 2024CS001)"
                     />
-                    <input
-                      type="text"
+                    <select
                       value={participantInput.department}
                       onChange={(e) => setParticipantInput({ ...participantInput, department: e.target.value })}
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      placeholder="Department"
-                    />
+                    >
+                      <option value="">Select Department</option>
+                      {DEPARTMENTS.map((dept) => (
+                        <option key={dept} value={dept}>
+                          {dept}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <button
                     type="button"
@@ -711,12 +788,16 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                 <button
                   type="submit"
                   disabled={createMutation.isLoading || updateMutation.isLoading}
-                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 min-w-[140px] justify-center"
+                  className={`btn-primary flex items-center space-x-2 min-w-[140px] justify-center ${
+                    (createMutation.isLoading || updateMutation.isLoading) 
+                      ? 'opacity-60 cursor-not-allowed pointer-events-none' 
+                      : ''
+                  }`}
                 >
                   {createMutation.isLoading || updateMutation.isLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                      <span>Saving...</span>
+                      <span>{editingStall ? 'Updating...' : 'Creating...'}</span>
                     </>
                   ) : (
                     <span>{editingStall ? 'Update Stall' : 'Create Stall'}</span>
