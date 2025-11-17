@@ -467,12 +467,29 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
       {/* Create/Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+            {/* Loading Overlay */}
+            {(createMutation.isLoading || updateMutation.isLoading) && (
+              <div className="absolute inset-0 bg-white bg-opacity-90 flex items-center justify-center z-10 rounded-lg">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                  <p className="text-lg font-semibold text-gray-700">
+                    {editingStall ? 'Updating stall...' : 'Creating stall...'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-2">Please wait, do not close this window</p>
+                </div>
+              </div>
+            )}
+            
             <div className="flex justify-between items-center p-6 border-b">
               <h3 className="text-xl font-bold">
                 {editingStall ? 'Edit Stall' : 'Create New Stall'}
               </h3>
-              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
+              <button 
+                onClick={closeModal} 
+                className="text-gray-400 hover:text-gray-600"
+                disabled={createMutation.isLoading || updateMutation.isLoading}
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -677,19 +694,27 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
               </div>
 
               <div className="flex justify-end space-x-3 pt-4 border-t">
-                <button type="button" onClick={closeModal} className="btn-secondary">
+                <button 
+                  type="button" 
+                  onClick={closeModal} 
+                  className="btn-secondary"
+                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createMutation.isLoading || updateMutation.isLoading}
-                  className="btn-primary disabled:opacity-50"
+                  className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 min-w-[140px] justify-center"
                 >
-                  {createMutation.isLoading || updateMutation.isLoading
-                    ? 'Saving...'
-                    : editingStall
-                    ? 'Update Stall'
-                    : 'Create Stall'}
+                  {createMutation.isLoading || updateMutation.isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <span>{editingStall ? 'Update Stall' : 'Create Stall'}</span>
+                  )}
                 </button>
               </div>
             </form>

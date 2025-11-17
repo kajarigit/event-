@@ -96,13 +96,19 @@ export default function StudentFeedback() {
     const initScanner = async () => {
       if (showScanner && !scanner && isActive) {
         try {
+          // Wait for DOM element to be ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
           // Check if element exists
           const element = document.getElementById('qr-scanner');
           if (!element) {
-            console.error('QR scanner element not found');
+            console.error('[Feedback QR] Scanner element not found in DOM');
+            toast.error('Scanner initialization failed. Please try again.');
             return;
           }
 
+          console.log('[Feedback QR] Initializing scanner with mobile-optimized settings...');
+          
           qrScanner = new Html5QrcodeScanner(
             'qr-scanner',
             { 
@@ -118,15 +124,17 @@ export default function StudentFeedback() {
             false
           );
 
-          console.log('QR Scanner initialized with enhanced settings');
+          console.log('[Feedback QR] Scanner initialized, starting render...');
           qrScanner.render(handleScan, handleScanError);
           
           if (isActive) {
             setScanner(qrScanner);
+            console.log('[Feedback QR] ✅ Scanner ready! Waiting for QR code scan...');
           }
         } catch (error) {
-          console.error('Failed to initialize QR scanner:', error);
-          toast.error('Failed to start camera. Please check permissions.');
+          console.error('[Feedback QR] Failed to initialize scanner:', error);
+          toast.error(`Camera error: ${error.message || 'Please check camera permissions'}`);
+          setShowScanner(false);
         }
       }
     };
@@ -136,8 +144,9 @@ export default function StudentFeedback() {
     return () => {
       isActive = false;
       if (qrScanner) {
+        console.log('[Feedback QR] Cleaning up scanner...');
         qrScanner.clear().catch((err) => {
-          console.log('Scanner cleanup error (safe to ignore):', err);
+          console.log('[Feedback QR] Cleanup error (safe to ignore):', err.message);
         });
       }
     };
@@ -311,14 +320,24 @@ export default function StudentFeedback() {
             </h3>
             
             {!showScanner && !scannedStall && (
-              <button
-                onClick={() => setShowScanner(true)}
-                disabled={!status?.isCheckedIn}
-                className="w-full py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:scale-105 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-              >
-                <Camera size={28} />
-                Open Camera to Scan Stall QR
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={() => {
+                    console.log('[Feedback QR] Opening scanner...');
+                    setShowScanner(true);
+                  }}
+                  disabled={!status?.isCheckedIn}
+                  className="w-full py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:scale-105 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                >
+                  <Camera size={28} />
+                  Open Camera to Scan Stall QR
+                </button>
+                {!status?.isCheckedIn && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
+                    ⚠️ You must check-in first to scan stall QR codes
+                  </p>
+                )}
+              </div>
             )}
 
             {showScanner && (
