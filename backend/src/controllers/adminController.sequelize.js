@@ -299,22 +299,25 @@ exports.createStall = async (req, res, next) => {
     const stall = await Stall.create(stallData);
 
     // Generate QR token with actual stall ID
+    let qrData = null;
     if (stall.eventId) {
       const qrResult = await generateStallQR(stall.id, stall.eventId);
       // generateStallQR returns { token, qrData, qrImage }
-      // Save only the token string to database
+      // qrData is JSON string with {stallId, eventId, type, token}
+      // token is JWT - save this to database
       stall.qrToken = qrResult.token;
+      qrData = qrResult.qrData; // Use this for QR code generation
       await stall.save();
     }
 
     // Send QR code email if ownerEmail is provided
-    if (stall.ownerEmail && stall.qrToken) {
+    if (stall.ownerEmail && qrData) {
       try {
         // Get event details
         const event = await Event.findByPk(stall.eventId);
         
-        // Generate QR code as data URL
-        const qrCodeDataURL = await QRCode.toDataURL(stall.qrToken, {
+        // Generate QR code as data URL using qrData (not token)
+        const qrCodeDataURL = await QRCode.toDataURL(qrData, {
           width: 300,
           margin: 2,
           color: {
@@ -430,8 +433,10 @@ exports.getStallQRCode = async (req, res, next) => {
     // Generate or regenerate QR token
     const qrResult = await generateStallQR(stall.id, stall.eventId);
     // generateStallQR returns { token, qrData, qrImage }
-    // Save only the token string to database
+    // qrData is the JSON string that should be in the QR code
+    // token is the JWT that we save to database for verification
     const qrToken = qrResult.token;
+    const qrData = qrResult.qrData; // This is what goes in the QR code
     
     await stall.update({ qrToken });
 
@@ -440,7 +445,8 @@ exports.getStallQRCode = async (req, res, next) => {
       data: {
         stallId: stall.id,
         stallName: stall.name,
-        qrToken,
+        qrToken: qrData, // Return qrData (JSON string) for QR code display
+        token: qrToken,  // Also return JWT token if needed
       },
     });
   } catch (error) {
@@ -504,7 +510,7 @@ exports.bulkUploadStalls = async (req, res, next) => {
       // Generate QR token
       const qrResult = await generateStallQR(stall.id, stall.eventId);
       // generateStallQR returns { token, qrData, qrImage }
-      // Save only the token string to database
+      // qrData is JSON string - save token to database
       stall.qrToken = qrResult.token;
       await stall.save();
 
@@ -514,8 +520,8 @@ exports.bulkUploadStalls = async (req, res, next) => {
           // Get event details
           const event = await Event.findByPk(stall.eventId);
           
-          // Generate QR code as data URL
-          const qrCodeDataURL = await QRCode.toDataURL(stall.qrToken, {
+          // Generate QR code as data URL using qrData (not token)
+          const qrCodeDataURL = await QRCode.toDataURL(qrResult.qrData, {
             width: 300,
             margin: 2,
             color: {
