@@ -39,7 +39,7 @@ exports.getEvents = async (req, res, next) => {
  */
 exports.getStalls = async (req, res, next) => {
   try {
-    const { eventId, isActive } = req.query;
+    const { eventId, isActive, forFeedback } = req.query;
     const studentId = req.user.id;
 
     // Get student details with department for filtering
@@ -59,8 +59,15 @@ exports.getStalls = async (req, res, next) => {
       where.isActive = isActive === 'true';
     }
 
-    // DEPARTMENT FILTER: Only show stalls from student's own department for voting
-    where.department = student.department;
+    // DEPARTMENT FILTER: Only apply for voting, NOT for feedback
+    // For feedback, students can rate ANY stall they visit
+    // For voting, students can only vote for stalls in their own department
+    if (forFeedback !== 'true') {
+      where.department = student.department;
+      console.log(`[Student Stalls] Filtering by department: ${student.department} (for voting)`);
+    } else {
+      console.log(`[Student Stalls] No department filter (for feedback)`);
+    }
 
     const stalls = await Stall.findAll({
       where,
@@ -74,7 +81,7 @@ exports.getStalls = async (req, res, next) => {
       order: [['name', 'ASC']],
     });
 
-    console.log(`[Student Stalls] Showing ${stalls.length} stalls from ${student.department} department for student ${student.name}`);
+    console.log(`[Student Stalls] Showing ${stalls.length} stalls for student ${student.name}`);
 
     res.status(200).json({
       success: true,

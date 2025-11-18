@@ -46,7 +46,7 @@ export default function StudentFeedback() {
   const { data: stalls = [] } = useQuery({
     queryKey: ['stalls', selectedEvent],
     queryFn: async () => {
-      const response = await studentApi.getStalls({ eventId: selectedEvent });
+      const response = await studentApi.getStalls({ eventId: selectedEvent, forFeedback: 'true' });
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
