@@ -257,36 +257,36 @@ export default function Scanner({ onScanSuccess }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* QR Scanner */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
+      {/* QR Scanner - Mobile Responsive */}
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Scan Student QR Code</h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-4">
+          <h2 className="text-base sm:text-lg font-semibold">Scan Student QR Code</h2>
           <button
             onClick={() => setUseManualMode(!useManualMode)}
-            className="btn-secondary text-sm flex items-center gap-2"
+            className="btn-secondary text-xs sm:text-sm flex items-center justify-center gap-1 sm:gap-2 py-2 px-3 touch-manipulation w-full sm:w-auto"
           >
             {useManualMode ? (
               <>
-                <Camera className="w-4 h-4" />
+                <Camera className="w-3 h-3 sm:w-4 sm:h-4" />
                 Use Camera
               </>
             ) : (
               <>
-                <Keyboard className="w-4 h-4" />
+                <Keyboard className="w-3 h-3 sm:w-4 sm:h-4" />
                 Manual Input
               </>
             )}
           </button>
         </div>
 
-        {/* Manual Input Mode */}
+        {/* Manual Input Mode - Mobile Responsive */}
         {useManualMode ? (
-          <div className="space-y-4">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 text-blue-600 mt-0.5" />
-                <div className="text-sm text-blue-800">
+          <div className="space-y-3 sm:space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div className="text-xs sm:text-sm text-blue-800">
                   <p className="font-medium mb-1">Camera Not Available</p>
                   <p>Camera access requires HTTPS or localhost. Using manual input mode.</p>
                   <p className="mt-2">
@@ -298,21 +298,21 @@ export default function Scanner({ onScanSuccess }) {
 
             <form onSubmit={handleManualSubmit} className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-2">
                   QR Code Data (JSON Token)
                 </label>
                 <textarea
                   value={manualInput}
                   onChange={(e) => setManualInput(e.target.value)}
                   placeholder='Paste QR data here (e.g., {"token":"...", "studentId":"...", "eventId":"..."})'
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-                  rows="4"
+                  className="w-full px-2 sm:px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs sm:text-sm touch-manipulation"
+                  rows="3"
                 />
               </div>
               <button
                 type="submit"
                 disabled={scanMutation.isPending || !manualInput.trim()}
-                className="btn-primary w-full"
+                className="btn-primary w-full py-3 text-sm sm:text-base touch-manipulation"
               >
                 {scanMutation.isPending ? 'Processing...' : 'Process QR Code'}
               </button>
@@ -323,39 +323,39 @@ export default function Scanner({ onScanSuccess }) {
           <div id="qr-reader" className="mb-4"></div>
         )}
 
-        {/* Scan Result */}
+        {/* Scan Result - Mobile Responsive */}
         {scanResult && (
           <div
-            className={`p-4 rounded-lg mb-4 ${
+            className={`p-3 sm:p-4 rounded-lg mb-3 sm:mb-4 ${
               scanResult.success
                 ? 'bg-green-50 border border-green-200'
                 : 'bg-red-50 border border-red-200'
             }`}
           >
             {scanResult.success ? (
-              <div className="flex items-start space-x-3">
-                <CheckCircle className="w-6 h-6 text-green-600 mt-0.5" />
-                <div>
-                  <h4 className="font-semibold text-green-900">
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-green-900 text-sm sm:text-base">
                     Check {scanResult.action.toUpperCase()} Successful
                   </h4>
-                  <p className="text-sm text-green-800 mt-1">
+                  <p className="text-xs sm:text-sm text-green-800 mt-1 truncate">
                     <strong>{scanResult.student.name}</strong>
                   </p>
-                  <p className="text-sm text-green-700">
+                  <p className="text-xs sm:text-sm text-green-700">
                     Roll: {scanResult.student.rollNo}
                   </p>
-                  <p className="text-sm text-green-700">
+                  <p className="text-xs sm:text-sm text-green-700 truncate">
                     Programme: {scanResult.student.programme}
                   </p>
                 </div>
               </div>
             ) : (
-              <div className="flex items-start space-x-3">
-                <XCircle className="w-6 h-6 text-red-600 mt-0.5" />
-                <div>
-                  <h4 className="font-semibold text-red-900">Scan Failed</h4>
-                  <p className="text-sm text-red-800 mt-1">{scanResult.message}</p>
+              <div className="flex items-start space-x-2 sm:space-x-3">
+                <XCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 mt-0.5 flex-shrink-0" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-red-900 text-sm sm:text-base">Scan Failed</h4>
+                  <p className="text-xs sm:text-sm text-red-800 mt-1">{scanResult.message}</p>
                 </div>
               </div>
             )}
@@ -391,9 +391,9 @@ export default function Scanner({ onScanSuccess }) {
           </div>
         )}
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <h3 className="font-medium text-blue-900 mb-2">Instructions:</h3>
-          <ul className="text-sm text-blue-800 space-y-1">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+          <h3 className="font-medium text-blue-900 mb-2 text-sm sm:text-base">Instructions:</h3>
+          <ul className="text-xs sm:text-sm text-blue-800 space-y-1">
             <li>• Point camera at student's QR code</li>
             <li>• First scan checks IN the student</li>
             <li>• Second scan checks OUT the student</li>
@@ -402,11 +402,11 @@ export default function Scanner({ onScanSuccess }) {
         </div>
       </div>
 
-      {/* Recent Scans */}
+      {/* Recent Scans - Mobile Responsive */}
       <div className="card">
-        <h2 className="text-lg font-semibold mb-4 flex items-center justify-between">
+        <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
           <span>Recent Scans</span>
-          <span className="text-sm text-gray-600">Auto-refreshes every 5s</span>
+          <span className="text-xs sm:text-sm text-gray-600">Auto-refreshes every 5s</span>
         </h2>
         <div className="space-y-3 max-h-[600px] overflow-y-auto">
           {recentScans.length === 0 ? (
