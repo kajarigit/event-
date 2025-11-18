@@ -148,6 +148,11 @@ export default function StudentFeedback() {
       }
 
       // Find stall in current event's stalls
+      console.log('[Feedback QR] Looking for stallId:', stallId);
+      console.log('[Feedback QR] Available stalls:', stalls);
+      console.log('[Feedback QR] Stalls count:', stalls.length);
+      console.log('[Feedback QR] Stall IDs:', stalls.map(s => s.id));
+      
       const stall = stalls.find(s => s.id === stallId);
       console.log('[Feedback QR] Found stall:', stall?.name || 'Not found');
       
