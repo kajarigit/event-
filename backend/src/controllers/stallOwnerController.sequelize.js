@@ -1,52 +1,133 @@
 const { User, Stall, Vote, Feedback, Event, sequelize } = require('../models/index.sequelize');
 const { generateAccessToken, generateRefreshToken } = require('../utils/jwt');
 const QRCode = require('qrcode');
+const bcrypt = require('bcryptjs');
 
 /**
- * @desc    Stall owner login (using Stall ID + password)
+ * @desc    Stall owner login (using email + password)
  * @route   POST /api/stall-owner/login
  * @access  Public
  */
 exports.login = async (req, res, next) => {
   try {
-    const { stallId, password } = req.body;
+    const { email, password, stallId } = req.body; // Support both email and legacy stallId
 
-    if (!stallId || !password) {
+    // Prioritize email login, but support legacy stallId for backward compatibility
+    if (!password || (!email && !stallId)) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide Stall ID and password',
+        message: 'Please provide email (or Stall ID) and password',
       });
     }
 
-    // Find stall by ID
-    const stall = await Stall.findByPk(stallId, {
-      include: [
-        {
-          model: Event,
-          as: 'event',
-          attributes: ['id', 'name', 'startDate', 'endDate', 'isActive']
-        }
-      ]
-    });
+    let stall;
 
-    if (!stall) {
-      return res.status(404).json({
-        success: false,
-        message: 'Invalid Stall ID or password',
+    // Try email-based login first (preferred method)
+    if (email) {
+      stall = await Stall.findOne({
+        where: { ownerEmail: email },
+        include: [
+          {
+            model: Event,
+            as: 'event',
+            attributes: ['id', 'name', 'startDate', 'endDate', 'isActive']
+          }
+        ]
       });
+
+      if (!stall) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid email or password',
+        });
+      }
+    } 
+    // Fallback to legacy stallId login (for backward compatibility)
+    else if (stallId) {
+      stall = await Stall.findByPk(stallId, {
+        include: [
+          {
+            model: Event,
+            as: 'event',
+            attributes: ['id', 'name', 'startDate', 'endDate', 'isActive']
+          }
+        ]
+      });
+
+      if (!stall) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid Stall ID or password',
+        });
+      }
     }
 
-    // Check password
-    if (!stall.ownerPassword || password !== stall.ownerPassword) {
+    // Verify password (support both hashed and plain text for backward compatibility)
+    if (!stall.ownerPassword) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid Stall ID or password',
+        message: email ? 'Invalid email or password' : 'Invalid Stall ID or password',
       });
     }
 
-    // Generate tokens
+    let isPasswordValid = false;
+    
+    // Check if password is hashed (bcrypt hashes start with $2a$, $2b$, or $2y$)
+    if (stall.ownerPassword.startsWith('$2')) {
+      // Use bcrypt to compare hashed password
+      isPasswordValid = await bcrypt.compare(password, stall.ownerPassword);
+    } else {
+      // Plain text comparison for legacy passwords
+      isPasswordValid = (password === stall.ownerPassword);
+      
+      // Auto-upgrade to hashed password on successful login
+      if (isPasswordValid) {
+        try {
+          const hashedPassword = await bcrypt.hash(password, 10);
+          await stall.update({ ownerPassword: hashedPassword });
+          console.log(`✅ Auto-upgraded password to hash for stall ${stall.id}`);
+        } catch (upgradeError) {
+          console.error('Failed to upgrade password:', upgradeError.message);
+          // Continue with login even if upgrade fails
+        }
+      }
+    }
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        message: email ? 'Invalid email or password' : 'Invalid Stall ID or password',
+      });
+    }
+
+    // Check if stall owner has email configured
+    if (!stall.ownerEmail) {
+      return res.status(400).json({
+        success: false,
+        message: 'This stall does not have an owner email configured. Please contact the administrator.',
+      });
+    }
+
+    // Generate tokens (use stall ID as identifier)
     const accessToken = generateAccessToken(stall.id, 'stall_owner');
     const refreshToken = generateRefreshToken(stall.id);
+
+    // Generate QR code for stall dashboard
+    let qrCodeDataURL = null;
+    if (stall.qrToken) {
+      try {
+        qrCodeDataURL = await QRCode.toDataURL(stall.qrToken, {
+          width: 300,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+      } catch (qrError) {
+        console.error('QR generation error:', qrError.message);
+      }
+    }
 
     res.json({
       success: true,
@@ -56,15 +137,23 @@ exports.login = async (req, res, next) => {
         refreshToken,
         stall: {
           id: stall.id,
+          stallId: stall.id, // Include for backward compatibility
           name: stall.name,
+          description: stall.description,
           department: stall.department,
+          location: stall.location,
+          category: stall.category,
           ownerName: stall.ownerName,
           ownerEmail: stall.ownerEmail,
+          ownerContact: stall.ownerContact,
+          qrCode: qrCodeDataURL,
           event: stall.event
         },
+        loginMethod: email ? 'email' : 'stallId' // Indicate which method was used
       },
     });
   } catch (error) {
+    console.error('Stall owner login error:', error);
     next(error);
   }
 };

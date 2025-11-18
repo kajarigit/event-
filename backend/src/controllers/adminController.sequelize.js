@@ -10,6 +10,7 @@ const fs = require('fs').promises;
 const { Op } = require('sequelize');
 const { QueryTypes } = require('sequelize');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 
 /**
  * EVENTS
@@ -324,10 +325,12 @@ exports.createStall = async (req, res, next) => {
 
     // Generate a secure random password for stall owner dashboard
     const password = crypto.randomBytes(4).toString('hex'); // 8 character random password
-
-    // Store password in stall (you may want to add a password field to Stall model)
-    // For now, we'll use ownerContact as password field or add a new field
-    stall.ownerPassword = password; // Store hashed in production
+    
+    // Hash the password before storing
+    const hashedPassword = await bcrypt.hash(password, 10);
+    
+    // Store hashed password in stall
+    stall.ownerPassword = hashedPassword;
     await stall.save();
 
     // Generate QR token with actual stall ID
@@ -527,6 +530,9 @@ exports.bulkUploadStalls = async (req, res, next) => {
 
         // Generate password for stall owner dashboard access
         const ownerPassword = row.ownerPassword || crypto.randomBytes(4).toString('hex'); // 8 character random password
+        
+        // Hash the password before storing
+        const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         const stallData = {
           eventId: row.eventId,
@@ -537,7 +543,7 @@ exports.bulkUploadStalls = async (req, res, next) => {
           ownerName: normalizeString(row.ownerName) || null,
           ownerContact: normalizeString(row.ownerContact) || null,
           ownerEmail: normalizeEmail(row.ownerEmail) || null,
-          ownerPassword: ownerPassword, // Store password for stall owner login
+          ownerPassword: hashedPassword, // Store hashed password for stall owner login
           department: normalizeDepartment(row.department), // Normalize department
           participants: row.participants ? JSON.parse(row.participants) : [],
           isActive: row.isActive !== 'false',

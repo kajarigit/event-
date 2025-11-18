@@ -8,14 +8,16 @@ import { Store, Mail, Lock, LogIn, TrendingUp } from 'lucide-react';
 export default function StallOwnerLogin() {
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
-    stallId: '',
+    email: '',
     password: '',
+    useStallId: false, // Toggle for legacy stallId login
+    stallId: '',
   });
 
   const loginMutation = useMutation({
-    mutationFn: ({ stallId, password }) => stallOwnerApi.login(stallId, password),
+    mutationFn: (credentials) => stallOwnerApi.login(credentials),
     onSuccess: (response) => {
-      const { accessToken, refreshToken, stall } = response.data.data;
+      const { accessToken, refreshToken, stall, loginMethod } = response.data.data;
       
       // Store tokens
       localStorage.setItem('accessToken', accessToken);
@@ -23,7 +25,11 @@ export default function StallOwnerLogin() {
       localStorage.setItem('userRole', 'stall_owner');
       localStorage.setItem('stallData', JSON.stringify(stall));
       
-      toast.success(`Welcome back, ${stall.ownerName}! 🎉`);
+      const loginMsg = loginMethod === 'email' 
+        ? `Welcome back, ${stall.ownerName}! 🎉` 
+        : `Welcome back, ${stall.ownerName}! 🎉 (Legacy login)`;
+      
+      toast.success(loginMsg);
       navigate('/stall-owner/dashboard');
     },
     onError: (error) => {
@@ -34,12 +40,29 @@ export default function StallOwnerLogin() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    if (!formData.stallId || !formData.password) {
-      toast.error('Please fill in all fields');
-      return;
+    // Validate based on login method
+    if (formData.useStallId) {
+      if (!formData.stallId || !formData.password) {
+        toast.error('Please provide Stall ID and password');
+        return;
+      }
+    } else {
+      if (!formData.email || !formData.password) {
+        toast.error('Please provide email and password');
+        return;
+      }
     }
 
-    loginMutation.mutate(formData);
+    // Prepare credentials based on login method
+    const credentials = {
+      password: formData.password,
+      ...(formData.useStallId 
+        ? { stallId: formData.stallId }
+        : { email: formData.email }
+      )
+    };
+
+    loginMutation.mutate(credentials);
   };
 
   const handleChange = (e) => {
@@ -63,32 +86,84 @@ export default function StallOwnerLogin() {
             Stall Owner Login
           </h1>
           <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 px-2">
-            Access your live dashboard and track competition
+            Access your live dashboard with email and password
           </p>
         </div>
 
         {/* Login Card - Mobile Responsive */}
         <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-2xl border-2 border-blue-200 dark:border-blue-700 p-4 sm:p-6 lg:p-8 animate-slideUp">
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Stall ID - Mobile Responsive */}
-            <div>
-              <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                <Store className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
-                Stall ID
-              </label>
-              <input
-                type="text"
-                name="stallId"
-                value={formData.stallId}
-                onChange={handleChange}
-                className="w-full px-3 sm:px-4 py-3 sm:py-4 text-sm sm:text-base bg-gray-50 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white dark:focus:bg-gray-600 text-gray-900 dark:text-white transition-all duration-200 font-mono"
-                placeholder="e.g., abc123-def4-5678-..."
-                required
-              />
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
-                📧 Check your email for your Stall ID
-              </p>
+            
+            {/* Login Method Toggle */}
+            <div className="text-center">
+              <div className="inline-flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1 mb-4">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, useStallId: false }))}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    !formData.useStallId
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  Email Login
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, useStallId: true }))}
+                  className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                    formData.useStallId
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                  }`}
+                >
+                  Stall ID Login
+                </button>
+              </div>
             </div>
+
+            {/* Dynamic Login Field */}
+            {formData.useStallId ? (
+              /* Stall ID Input */
+              <div>
+                <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                  <Store className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  Stall ID
+                </label>
+                <input
+                  type="text"
+                  name="stallId"
+                  value={formData.stallId}
+                  onChange={handleChange}
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 text-sm sm:text-base bg-gray-50 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white dark:focus:bg-gray-600 text-gray-900 dark:text-white transition-all duration-200 font-mono"
+                  placeholder="e.g., abc123-def4-5678-..."
+                  required
+                />
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  📧 Check your email for your Stall ID (Legacy method)
+                </p>
+              </div>
+            ) : (
+              /* Email Input */
+              <div>
+                <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                  <Mail className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600 dark:text-blue-400" />
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 text-sm sm:text-base bg-gray-50 dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:bg-white dark:focus:bg-gray-600 text-gray-900 dark:text-white transition-all duration-200"
+                  placeholder="your.email@example.com"
+                  required
+                />
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-1">
+                  📧 Use the email address provided during stall creation
+                </p>
+              </div>
+            )}
 
             {/* Password */}
             <div>
@@ -158,6 +233,20 @@ export default function StallOwnerLogin() {
                 <span><strong>Department Leaderboard:</strong> Compete with your school stalls</span>
               </li>
             </ul>
+          </div>
+        </div>
+
+        {/* Help Note */}
+        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mt-6">
+          <div className="text-center">
+            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-200 mb-2">
+              🔐 New Email-Based Login System
+            </h4>
+            <p className="text-xs text-blue-700 dark:text-blue-300">
+              Use your <strong>stall owner email</strong> and the <strong>password sent to you</strong> during stall creation.
+              <br />
+              Can't find your credentials? Contact the event administrator.
+            </p>
           </div>
         </div>
 

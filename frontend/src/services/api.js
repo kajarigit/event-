@@ -162,7 +162,7 @@ export const adminApi = {
 
 // Stall Owner API
 export const stallOwnerApi = {
-  login: (stallId, password) => api.post('/stall-owner/login', { stallId, password }),
+  login: (credentials) => api.post('/stall-owner/login', credentials),
   getMyStall: () => api.get('/stall-owner/my-stall'),
   getDepartmentLeaderboard: () => api.get('/stall-owner/department-leaderboard'),
   getLiveVotes: (params) => api.get('/stall-owner/live-votes', { params }),
