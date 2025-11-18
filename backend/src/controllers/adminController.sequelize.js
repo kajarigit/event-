@@ -475,21 +475,25 @@ exports.getStallQRCode = async (req, res, next) => {
     // Generate or regenerate QR token
     const qrResult = await generateStallQR(stall.id, stall.eventId);
     // generateStallQR returns { token, qrData, qrImage }
-    // qrData is the JSON string that should be in the QR code
-    // token is the JWT that we save to database for verification
-    // qrImage is the base64 PNG image for display
-    const qrToken = qrResult.token;
+    // - token: JWT for database storage (for verification)
+    // - qrData: JSON string that goes INTO the QR code (what scanner reads)
+    // - qrImage: base64 PNG image (for display only)
+    
+    const jwtToken = qrResult.token;  // JWT for database
+    const qrDataString = qrResult.qrData; // JSON string for QR code
     const qrImage = qrResult.qrImage; // Base64 PNG image
     
-    await stall.update({ qrToken });
+    // Save JWT to database for later verification
+    await stall.update({ qrToken: jwtToken });
 
     res.status(200).json({
       success: true,
       data: {
         stallId: stall.id,
         stallName: stall.name,
-        qrCode: qrImage, // Return qrImage (base64 PNG) for display
-        qrToken: qrToken,  // Also return JWT token if needed
+        qrCode: qrImage,      // Base64 PNG image (if frontend wants to display it directly)
+        qrToken: qrDataString, // JSON string to encode in QR (what frontend should use!)
+        qrImage: qrImage,      // Also include as qrImage for clarity
       },
     });
   } catch (error) {
