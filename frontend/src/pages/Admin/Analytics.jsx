@@ -97,26 +97,30 @@ export default function Analytics() {
 
   // Transform data for charts
   const topStudentsData = topStudents.map((s) => ({
-    name: s.studentId?.name || 'Unknown',
-    minutes: Math.round(s.totalDuration / 60),
+    name: s.name || 'Unknown',
+    minutes: Math.round(s.stayTimeMinutes || 0),
+    department: s.department || 'N/A',
   }));
 
   const topReviewersData = mostReviewers.map((s) => ({
-    name: s.studentId?.name || 'Unknown',
-    feedbacks: s.totalFeedbacks,
+    name: s.name || 'Unknown',
+    feedbacks: parseInt(s.feedbackCount) || 0,
+    votes: parseInt(s.voteCount) || 0,
+    total: parseInt(s.totalReviews) || 0,
   }));
 
   const topStallsData = topStalls.map((s) => ({
-    name: s.stallId?.name || 'Unknown',
-    score: s.totalScore,
-    votes: s.totalVotes,
+    name: s.name || 'Unknown',
+    score: parseFloat(s.averageRating) || 0,
+    votes: parseInt(s.totalVotes) || 0,
+    department: s.department || 'N/A',
   }));
 
   const deptStatsData = deptStats.map((d) => ({
-    name: d.id,
-    students: d.uniqueStudents,
-    votes: d.totalVotes,
-    feedbacks: d.totalFeedbacks,
+    name: d.department || 'Unknown',
+    students: parseInt(d.studentCount) || 0,
+    votes: parseInt(d.totalVotes) || 0,
+    feedbacks: parseInt(d.totalFeedbacks) || 0,
   }));
 
   return (

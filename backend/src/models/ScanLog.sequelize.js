@@ -34,6 +34,22 @@ const ScanLog = sequelize.define('ScanLog', {
     },
     onDelete: 'SET NULL'
   },
+  scannedBy: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: 'users',
+      key: 'id'
+    },
+    onDelete: 'SET NULL',
+    comment: 'The volunteer/admin who performed the scan'
+  },
+  gate: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    defaultValue: 'Gate 1',
+    comment: 'Gate location where the scan was performed'
+  },
   scanType: {
     type: DataTypes.ENUM('check-in', 'check-out', 'vote', 'feedback'),
     allowNull: false

@@ -321,8 +321,10 @@ exports.scanStudent = async (req, res, next) => {
     // Create scan log
     const scanLog = await ScanLog.create(
       {
-        userId: volunteerId,
+        userId: studentId,
         eventId,
+        scannedBy: req.user.id, // The volunteer/admin who performed the scan
+        gate: req.body.gate || 'Gate 1', // Allow gate to be specified
         scanType: action === 'in' ? 'check-in' : 'check-out',
         scanTime: new Date(),
         status: 'success',
