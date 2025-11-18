@@ -515,6 +515,7 @@ exports.bulkUploadStalls = async (req, res, next) => {
 
     const stallsToCreate = [];
     const errors = [];
+    const stallPasswords = new Map(); // Store stall ID -> password mapping
 
     for (let i = 0; i < parsed.data.length; i++) {
       const row = parsed.data[i];
@@ -524,7 +525,10 @@ exports.bulkUploadStalls = async (req, res, next) => {
           continue;
         }
 
-        stallsToCreate.push({
+        // Generate password for stall owner dashboard access
+        const ownerPassword = row.ownerPassword || crypto.randomBytes(4).toString('hex'); // 8 character random password
+
+        const stallData = {
           eventId: row.eventId,
           name: normalizeString(row.name),
           description: normalizeString(row.description) || null,
@@ -533,10 +537,16 @@ exports.bulkUploadStalls = async (req, res, next) => {
           ownerName: normalizeString(row.ownerName) || null,
           ownerContact: normalizeString(row.ownerContact) || null,
           ownerEmail: normalizeEmail(row.ownerEmail) || null,
+          ownerPassword: ownerPassword, // Store password for stall owner login
           department: normalizeDepartment(row.department), // Normalize department
           participants: row.participants ? JSON.parse(row.participants) : [],
           isActive: row.isActive !== 'false',
-        });
+        };
+
+        stallsToCreate.push(stallData);
+        
+        // Store password for later email sending (using name as temporary key)
+        stallPasswords.set(stallData.name, ownerPassword);
       } catch (error) {
         errors.push({ row: i + 1, error: error.message });
       }
@@ -577,10 +587,13 @@ exports.bulkUploadStalls = async (req, res, next) => {
             }
           });
 
-          // Send email
-          await sendStallQRCode(stall, qrCodeDataURL, event);
+          // Get password for this stall
+          const password = stallPasswords.get(stall.name) || stall.ownerPassword;
+          
+          // Send comprehensive email with credentials and QR code
+          await sendStallOwnerCredentials(stall, qrCodeDataURL, event, password);
           emailResults.sent++;
-          console.log(`✅ Stall QR email sent to ${stall.ownerEmail}`);
+          console.log(`✅ Stall owner credentials and QR sent to ${stall.ownerEmail}`);
         } catch (emailError) {
           emailResults.failed++;
           emailResults.errors.push({

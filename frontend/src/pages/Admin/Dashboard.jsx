@@ -105,8 +105,12 @@ export default function AdminDashboard() {
                       }`
                     }
                   >
-                    <Icon className={`flex-shrink-0 w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
-                    <span>{item.name}</span>
+                    {({ isActive }) => (
+                      <>
+                        <Icon className={`flex-shrink-0 w-5 h-5 ${isActive ? 'text-white' : 'text-gray-500'}`} />
+                        <span>{item.name}</span>
+                      </>
+                    )}
                   </NavLink>
                 </li>
               );

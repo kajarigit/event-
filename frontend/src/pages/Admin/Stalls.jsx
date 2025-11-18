@@ -169,12 +169,30 @@ export default function Stalls() {
       return adminApi.bulkUploadStalls(formData);
     },
     onSuccess: (response) => {
-      const { created, errors } = response.data;
-      toast.success(`${created} stalls uploaded successfully!`);
-      if (errors.length > 0) {
-        toast.error(`${errors.length} errors occurred`);
-        console.error('Upload errors:', errors);
+      const data = response.data?.data || response.data;
+      const { created, uploadErrors, emailsSent, emailsFailed, emailsSkipped } = data;
+      
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Bulk Upload Successful!</div>
+          <div className="text-sm mt-1">
+            {created} stalls created • {emailsSent} emails sent
+            {emailsSkipped > 0 && ` • ${emailsSkipped} emails skipped (no email provided)`}
+            {emailsFailed > 0 && ` • ${emailsFailed} email failures`}
+          </div>
+        </div>,
+        { duration: 6000 }
+      );
+      
+      if (uploadErrors?.length > 0) {
+        toast.error(`${uploadErrors.length} upload errors occurred - check console for details`);
+        console.error('Upload errors:', uploadErrors);
       }
+      
+      if (data.emailErrors?.length > 0) {
+        console.error('Email errors:', data.emailErrors);
+      }
+      
       queryClient.invalidateQueries(['adminStalls']);
     },
     onError: (error) => {
@@ -363,9 +381,9 @@ export default function Stalls() {
 
   // Download sample template
   const downloadSampleTemplate = () => {
-    const csvContent = `eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,department,participants
-REPLACE_WITH_EVENT_UUID,AI & Machine Learning,Showcasing AI projects,Block A - Room 101,Technology,Dr. Rajesh Kumar,9876543210,rajesh.kumar@college.edu,Computer Science,"[{\\"name\\":\\"Amit Sharma\\",\\"regNo\\":\\"2024CS001\\",\\"department\\":\\"Computer Science\\"},{\\"name\\":\\"Priya Patel\\",\\"regNo\\":\\"2024CS045\\",\\"department\\":\\"Computer Science\\"}]"
-REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,Technology,Prof. Neha Singh,9876543211,neha.singh@college.edu,Electronics,"[{\\"name\\":\\"Vikram Reddy\\",\\"regNo\\":\\"2024EC012\\",\\"department\\":\\"Electronics\\"}]"`;
+    const csvContent = `eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,ownerPassword,department,participants
+REPLACE_WITH_EVENT_UUID,AI & Machine Learning,Showcasing AI projects,Block A - Room 101,Technology,Dr. Rajesh Kumar,9876543210,rajesh.kumar@college.edu,ai2024pass,Computer Science,"[{\\"name\\":\\"Amit Sharma\\",\\"regNo\\":\\"2024CS001\\",\\"department\\":\\"Computer Science\\"},{\\"name\\":\\"Priya Patel\\",\\"regNo\\":\\"2024CS045\\",\\"department\\":\\"Computer Science\\"}]"
+REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,Technology,Prof. Neha Singh,9876543211,neha.singh@college.edu,iot2024pass,Electronics,"[{\\"name\\":\\"Vikram Reddy\\",\\"regNo\\":\\"2024EC012\\",\\"department\\":\\"Electronics\\"}]"`;
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
@@ -376,12 +394,12 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Sample template downloaded! Replace REPLACE_WITH_EVENT_UUID with actual event ID. Participants should be JSON array.');
+    toast.success('Sample template downloaded! Replace REPLACE_WITH_EVENT_UUID with actual event ID. ownerPassword is optional (random generated if empty). Participants should be JSON array.');
   };
 
   // Download blank template
   const downloadBlankTemplate = () => {
-    const csvContent = 'eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,department,participants\n';
+    const csvContent = 'eventId,name,description,location,category,ownerName,ownerContact,ownerEmail,ownerPassword,department,participants\n';
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);

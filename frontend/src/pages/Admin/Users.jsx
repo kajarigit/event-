@@ -81,12 +81,29 @@ export default function Users() {
       return adminApi.bulkUploadUsers(formData);
     },
     onSuccess: (response) => {
-      const { created, errors } = response.data;
-      toast.success(`${created} users uploaded successfully!`);
-      if (errors.length > 0) {
-        toast.error(`${errors.length} errors occurred`);
-        console.error('Upload errors:', errors);
+      const data = response.data?.data || response.data;
+      const { created, uploadErrors, emailsSent, emailsFailed } = data;
+      
+      toast.success(
+        <div>
+          <div className="font-bold">✅ Bulk Upload Successful!</div>
+          <div className="text-sm mt-1">
+            {created} users created • {emailsSent} welcome emails sent
+            {emailsFailed > 0 && ` • ${emailsFailed} email failures`}
+          </div>
+        </div>,
+        { duration: 6000 }
+      );
+      
+      if (uploadErrors?.length > 0) {
+        toast.error(`${uploadErrors.length} upload errors occurred - check console for details`);
+        console.error('Upload errors:', uploadErrors);
       }
+      
+      if (data.emailErrors?.length > 0) {
+        console.error('Email errors:', data.emailErrors);
+      }
+      
       queryClient.invalidateQueries(['adminUsers']);
     },
     onError: (error) => {
