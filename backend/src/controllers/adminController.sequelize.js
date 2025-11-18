@@ -477,8 +477,9 @@ exports.getStallQRCode = async (req, res, next) => {
     // generateStallQR returns { token, qrData, qrImage }
     // qrData is the JSON string that should be in the QR code
     // token is the JWT that we save to database for verification
+    // qrImage is the base64 PNG image for display
     const qrToken = qrResult.token;
-    const qrData = qrResult.qrData; // This is what goes in the QR code
+    const qrImage = qrResult.qrImage; // Base64 PNG image
     
     await stall.update({ qrToken });
 
@@ -487,8 +488,8 @@ exports.getStallQRCode = async (req, res, next) => {
       data: {
         stallId: stall.id,
         stallName: stall.name,
-        qrToken: qrData, // Return qrData (JSON string) for QR code display
-        token: qrToken,  // Also return JWT token if needed
+        qrCode: qrImage, // Return qrImage (base64 PNG) for display
+        qrToken: qrToken,  // Also return JWT token if needed
       },
     });
   } catch (error) {
