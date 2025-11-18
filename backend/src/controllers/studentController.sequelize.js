@@ -150,9 +150,21 @@ exports.submitFeedback = async (req, res, next) => {
     const { stallId, eventId, rating, comments } = req.body;
     const studentId = req.user.id;
 
+    // DEBUG LOGGING
+    console.log('\n[FEEDBACK DEBUG] =================================');
+    console.log('[FEEDBACK DEBUG] Request body:', JSON.stringify(req.body, null, 2));
+    console.log('[FEEDBACK DEBUG] Student ID:', studentId);
+    console.log('[FEEDBACK DEBUG] Stall ID:', stallId);
+    console.log('[FEEDBACK DEBUG] Event ID:', eventId);
+    console.log('[FEEDBACK DEBUG] =================================\n');
+
     // Check if stall exists
     const stall = await Stall.findByPk(stallId);
+    console.log('[FEEDBACK DEBUG] Stall found:', stall ? `${stall.name} (${stall.id})` : 'NULL');
+    console.log('[FEEDBACK DEBUG] Stall isActive:', stall?.isActive);
+    
     if (!stall || !stall.isActive) {
+      console.log('[FEEDBACK DEBUG] ❌ Returning 404 - Stall not found or inactive');
       return res.status(404).json({
         success: false,
         message: 'Stall not found or inactive',
