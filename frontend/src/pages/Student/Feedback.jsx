@@ -14,8 +14,17 @@ export default function StudentFeedback() {
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
   const [scanValidation, setScanValidation] = useState(null); // { status: 'valid'|'invalid', message: '', details: '' }
+  const [debugLogs, setDebugLogs] = useState([]); // Debug logs for mobile viewing
   const queryClient = useQueryClient();
   const scannerRef = useRef(null); // Scanner instance reference
+
+  // Helper to add debug logs
+  const addDebugLog = (message, data = null) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = { timestamp, message, data };
+    setDebugLogs(prev => [...prev.slice(-20), logEntry]); // Keep last 20 logs
+    console.log(`[${timestamp}] ${message}`, data || '');
+  };
 
   // Fetch events (active or all)
   const { data: events = [] } = useQuery({
@@ -92,11 +101,13 @@ export default function StudentFeedback() {
   const handleScan = useCallback(async (decodedText) => {
     // Prevent processing multiple scans at once
     if (isProcessingScan) {
+      addDebugLog('Already processing a scan, ignoring...');
       console.log('[Feedback QR] Already processing a scan, ignoring...');
       return;
     }
 
     setIsProcessingScan(true);
+    addDebugLog('Raw scanned data:', decodedText);
     console.log('[Feedback QR] Raw scanned data:', decodedText);
     
     try {
@@ -104,8 +115,10 @@ export default function StudentFeedback() {
       let qrData;
       try {
         qrData = JSON.parse(decodedText);
+        addDebugLog('Parsed QR data:', qrData);
         console.log('[Feedback QR] Parsed QR data:', qrData);
       } catch (parseError) {
+        addDebugLog('Parse error - not valid JSON', parseError.message);
         setScanValidation({
           status: 'invalid',
           message: '❌ Invalid QR Code Format',
@@ -118,9 +131,11 @@ export default function StudentFeedback() {
       }
       
       const { stallId, eventId, type } = qrData;
+      addDebugLog('Extracted from QR:', { stallId, eventId, type });
 
       // Validate QR type
       if (type !== 'stall') {
+        addDebugLog('Wrong type - expected "stall", got:', type);
         setScanValidation({
           status: 'invalid',
           message: '❌ Wrong QR Code Type',
@@ -133,9 +148,11 @@ export default function StudentFeedback() {
       }
 
       // Validate event match
+      addDebugLog('Validating event match:', { qrEventId: eventId, selectedEvent });
       if (eventId !== selectedEvent) {
         const eventName = events.find(e => e.id === eventId)?.name || 'another event';
         const currentEventName = events.find(e => e.id === selectedEvent)?.name || 'current event';
+        addDebugLog('Event mismatch!', { qrEvent: eventName, selectedEvent: currentEventName });
         setScanValidation({
           status: 'invalid',
           message: '❌ Wrong Event',
@@ -148,15 +165,22 @@ export default function StudentFeedback() {
       }
 
       // Find stall in current event's stalls
+      addDebugLog('Looking for stallId:', stallId);
+      addDebugLog('Available stalls:', stalls);
+      addDebugLog('Stalls count:', stalls.length);
+      addDebugLog('Stall IDs:', stalls.map(s => s.id));
+      
       console.log('[Feedback QR] Looking for stallId:', stallId);
       console.log('[Feedback QR] Available stalls:', stalls);
       console.log('[Feedback QR] Stalls count:', stalls.length);
       console.log('[Feedback QR] Stall IDs:', stalls.map(s => s.id));
       
       const stall = stalls.find(s => s.id === stallId);
+      addDebugLog('Found stall:', stall?.name || 'NOT FOUND');
       console.log('[Feedback QR] Found stall:', stall?.name || 'Not found');
       
       if (!stall) {
+        addDebugLog('ERROR: Stall not found in event!');
         setScanValidation({
           status: 'invalid',
           message: '❌ Stall Not Found',
@@ -171,6 +195,7 @@ export default function StudentFeedback() {
       // Check if already given feedback to this stall
       const alreadyFeedback = myFeedbacks.find(f => f.stallId?.id === stallId || f.stallId === stallId);
       if (alreadyFeedback) {
+        addDebugLog('Already submitted feedback for this stall');
         setScanValidation({
           status: 'invalid',
           message: '❌ Already Submitted',
@@ -183,6 +208,7 @@ export default function StudentFeedback() {
       }
 
       // SUCCESS! Set scanned stall and close scanner
+      addDebugLog('SUCCESS! Stall scanned:', stall.name);
       setScanValidation({
         status: 'valid',
         message: '✅ Valid Stall QR Code',
@@ -202,6 +228,7 @@ export default function StudentFeedback() {
         icon: '🎯',
       });
     } catch (error) {
+      addDebugLog('Scan error:', error.message);
       console.error('[Feedback QR] Scan error:', error);
       setScanValidation({
         status: 'invalid',
@@ -340,6 +367,33 @@ export default function StudentFeedback() {
 
   return (
     <div className="space-y-6">
+      {/* Debug Console Panel - Shows on mobile */}
+      {debugLogs.length > 0 && (
+        <div className="card bg-black text-green-400 font-mono text-xs max-h-96 overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-white font-bold">🐛 Debug Console (Mobile View)</h3>
+            <button
+              onClick={() => setDebugLogs([])}
+              className="px-2 py-1 bg-red-600 text-white rounded text-xs"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="space-y-1">
+            {debugLogs.map((log, idx) => (
+              <div key={idx} className="border-b border-gray-700 pb-1">
+                <div className="text-yellow-400">[{log.timestamp}] {log.message}</div>
+                {log.data && (
+                  <div className="text-green-300 ml-4 whitespace-pre-wrap break-all">
+                    {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : String(log.data)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="animate-fadeIn">
         <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
