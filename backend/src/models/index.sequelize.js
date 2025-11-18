@@ -62,7 +62,7 @@ const syncModels = async () => {
     // Only use sync({ alter: true }) when you change model definitions.
     // For normal startup, just verify tables exist without altering them.
     
-    await sequelize.sync({ alter: true }); // ⚠️ SLOW - Only uncomment when changing models
+    // await sequelize.sync({ alter: true }); // ⚠️ SLOW - Only uncomment when changing models
     console.log('All models synced successfully');
   } catch (error) {
     console.error('Error syncing models:', error);

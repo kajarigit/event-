@@ -84,7 +84,8 @@ export default function Stalls() {
         }
       );
       queryClient.invalidateQueries(['adminStalls']);
-      closeModal();
+      setIsSubmitting(false); // Reset submitting state
+      closeModal(); // Close modal after successful creation
     },
     onError: (error) => {
       const errorMessage = error.response?.data?.message || 'Failed to create stall';
@@ -101,6 +102,7 @@ export default function Stalls() {
           },
         }
       );
+      setIsSubmitting(false); // Reset submitting state on error
       console.error('[Stall Form] Create error:', error);
     },
   });
@@ -124,7 +126,8 @@ export default function Stalls() {
         }
       );
       queryClient.invalidateQueries(['adminStalls']);
-      closeModal();
+      setIsSubmitting(false); // Reset submitting state
+      closeModal(); // Close modal after successful update
     },
     onError: (error) => {
       const errorMessage = error.response?.data?.message || 'Failed to update stall';
@@ -141,6 +144,7 @@ export default function Stalls() {
           },
         }
       );
+      setIsSubmitting(false); // Reset submitting state on error
       console.error('[Stall Form] Update error:', error);
     },
   });
@@ -236,6 +240,7 @@ export default function Stalls() {
   const closeModal = () => {
     setShowModal(false);
     setEditingStall(null);
+    setIsSubmitting(false); // Reset submitting state when closing modal
     setFormData({
       name: '',
       department: '',
@@ -272,21 +277,41 @@ export default function Stalls() {
     toast.success('Participant removed!');
   };
 
-  const handleSubmit = (e) => {
+  // Add state to track submission to prevent double-clicks
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lastSubmissionTime, setLastSubmissionTime] = useState(0);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     
-    // Prevent multiple submissions - check if already submitting
-    if (createMutation.isLoading || updateMutation.isLoading) {
-      console.log('[Stall Form] Already submitting, ignoring duplicate click...');
+    // Prevent multiple submissions - comprehensive check with debouncing
+    const now = Date.now();
+    const timeSinceLastSubmission = now - lastSubmissionTime;
+    
+    if (isSubmitting || createMutation.isLoading || updateMutation.isLoading) {
+      console.log('[Stall Form] Already submitting, ignoring duplicate submission...');
       toast.error('Please wait, your request is being processed...', { duration: 2000 });
       return;
     }
+    
+    // Debounce: Prevent submissions within 2 seconds of each other
+    if (timeSinceLastSubmission < 2000) {
+      console.log('[Stall Form] Submission too soon after last attempt, ignoring...');
+      toast.error('Please wait before submitting again...', { duration: 2000 });
+      return;
+    }
+    
+    // Record submission time
+    setLastSubmissionTime(now);
     
     // Validate required fields
     if (!formData.eventId || !formData.name || !formData.department) {
       toast.error('Please fill in all required fields (Event, Name, Department)');
       return;
     }
+
+    // Set submitting state immediately
+    setIsSubmitting(true);
     
     const stallData = {
       name: formData.name.trim(),
@@ -303,10 +328,18 @@ export default function Stalls() {
     
     console.log('[Stall Form] Submitting stall:', stallData);
     
-    if (editingStall) {
-      updateMutation.mutate({ id: editingStall.id, data: stallData });
-    } else {
-      createMutation.mutate(stallData);
+    try {
+      if (editingStall) {
+        await updateMutation.mutateAsync({ id: editingStall.id, data: stallData });
+      } else {
+        await createMutation.mutateAsync(stallData);
+      }
+    } catch (error) {
+      console.error('[Stall Form] Submission error:', error);
+      // Error handling is already done in mutation onError
+    } finally {
+      // Reset submitting state after completion (success or error)
+      setIsSubmitting(false);
     }
   };
 
@@ -812,20 +845,20 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                   type="button" 
                   onClick={closeModal} 
                   className="btn-secondary"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                  disabled={isSubmitting || createMutation.isLoading || updateMutation.isLoading}
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={createMutation.isLoading || updateMutation.isLoading}
+                  disabled={isSubmitting || createMutation.isLoading || updateMutation.isLoading}
                   className={`btn-primary flex items-center space-x-2 min-w-[140px] justify-center ${
-                    (createMutation.isLoading || updateMutation.isLoading) 
+                    (isSubmitting || createMutation.isLoading || updateMutation.isLoading) 
                       ? 'opacity-60 cursor-not-allowed pointer-events-none' 
                       : ''
                   }`}
                 >
-                  {createMutation.isLoading || updateMutation.isLoading ? (
+                  {isSubmitting || createMutation.isLoading || updateMutation.isLoading ? (
                     <>
                       <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
                       <span>{editingStall ? 'Updating...' : 'Creating...'}</span>
