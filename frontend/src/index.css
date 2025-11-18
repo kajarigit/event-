@@ -9,8 +9,44 @@
   
   /* Ensure proper touch targets on mobile */
   @media (max-width: 768px) {
-    button, a, input, select {
+    button, a, input, select, textarea {
       min-height: 44px; /* iOS recommended touch target */
+    }
+    
+    /* Prevent horizontal scrolling on mobile */
+    body {
+      overflow-x: hidden;
+    }
+    
+    /* Improve font size for mobile readability */
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
+  }
+  
+  /* Safe area insets for modern mobile devices */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Custom scrollbar for mobile webkit */
+  @media (hover: none) and (pointer: coarse) {
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
     }
   }
 }
@@ -162,6 +198,50 @@
   transition-property: background-color, border-color, color, fill, stroke;
   transition-duration: 200ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Mobile-specific utilities */
+@layer utilities {
+  /* Touch manipulation for better mobile experience */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  /* Mobile-friendly focus states */
+  @media (hover: none) and (pointer: coarse) {
+    .focus-mobile {
+      @apply focus:ring-4 focus:ring-opacity-50;
+    }
+    
+    /* Remove hover effects on touch devices */
+    .hover\:scale-105:hover {
+      transform: scale(1.05);
+    }
+    
+    /* Use active states instead of hover on touch devices */
+    .mobile-active:active {
+      transform: scale(0.95);
+    }
+  }
+  
+  /* High DPI mobile display optimizations */
+  @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .high-dpi-shadow {
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
+    }
+  }
+  
+  /* Prevent zoom on input focus (mobile Safari) */
+  @media screen and (max-width: 767px) {
+    input[type="text"], 
+    input[type="email"], 
+    input[type="password"], 
+    input[type="number"], 
+    select, 
+    textarea {
+      font-size: 16px !important;
+    }
+  }
 }
 
 

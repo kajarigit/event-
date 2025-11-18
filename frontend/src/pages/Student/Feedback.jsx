@@ -366,86 +366,124 @@ export default function StudentFeedback() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Debug Console Panel - Shows on mobile */}
-      {debugLogs.length > 0 && (
-        <div className="card bg-black text-green-400 font-mono text-xs max-h-96 overflow-y-auto">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-white font-bold">🐛 Debug Console (Mobile View)</h3>
-            <button
-              onClick={() => setDebugLogs([])}
-              className="px-2 py-1 bg-red-600 text-white rounded text-xs"
-            >
-              Clear
-            </button>
-          </div>
-          <div className="space-y-1">
-            {debugLogs.map((log, idx) => (
-              <div key={idx} className="border-b border-gray-700 pb-1">
-                <div className="text-yellow-400">[{log.timestamp}] {log.message}</div>
-                {log.data && (
-                  <div className="text-green-300 ml-4 whitespace-pre-wrap break-all">
-                    {typeof log.data === 'object' ? JSON.stringify(log.data, null, 2) : String(log.data)}
-                  </div>
-                )}
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 dark:from-gray-900 dark:via-gray-800 dark:to-purple-900">
+      {/* Responsive Header with Status Bar */}
+      <div className="sticky top-0 z-50 bg-white/95 dark:bg-gray-900/95 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700">
+        <div className="px-3 sm:px-4 lg:px-6 py-3 safe-area-top">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-            ))}
+              <div>
+                <h1 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 dark:text-white">Feedback</h1>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">Rate your experience</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {status?.isCheckedIn ? (
+                <div className="flex items-center space-x-1 bg-green-100 dark:bg-green-900/30 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs sm:text-sm font-medium text-green-700 dark:text-green-300">Live</span>
+                </div>
+              ) : (
+                <div className="flex items-center space-x-1 bg-orange-100 dark:bg-orange-900/30 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full">
+                  <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
+                  <span className="text-xs sm:text-sm font-medium text-orange-700 dark:text-orange-300">Check-in needed</span>
+                </div>
+              )}
+            </div>
           </div>
+        </div>
+      </div>
+
+      {/* Responsive Debug Console - Collapsible */}
+      {debugLogs.length > 0 && (
+        <div className="mx-3 sm:mx-4 lg:mx-6 mt-4">
+          <details className="bg-black rounded-lg lg:rounded-xl overflow-hidden shadow-lg">
+            <summary className="px-3 sm:px-4 py-2 sm:py-3 bg-gray-800 text-white text-sm sm:text-base font-medium cursor-pointer flex items-center justify-between hover:bg-gray-700 transition-colors">
+              <span className="flex items-center gap-2">
+                <span>🐛</span>
+                <span className="hidden sm:inline">Debug Console</span>
+                <span className="sm:hidden">Debug</span>
+                <span className="text-xs sm:text-sm opacity-75">({debugLogs.length})</span>
+              </span>
+              <span className="text-xs sm:text-sm opacity-75">Tap to expand</span>
+            </summary>
+            <div className="p-3 sm:p-4 max-h-32 sm:max-h-48 lg:max-h-64 overflow-y-auto text-xs sm:text-sm font-mono">
+              {debugLogs.slice(-5).map((log, idx) => (
+                <div key={idx} className="mb-2 pb-2 border-b border-gray-700 last:border-b-0">
+                  <div className="text-yellow-400 font-medium text-xs sm:text-sm">{log.timestamp} - {log.message}</div>
+                  {log.data && (
+                    <div className="text-green-300 mt-1 break-all text-xs leading-relaxed">
+                      {typeof log.data === 'object' ? JSON.stringify(log.data, null, 1) : String(log.data)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </details>
         </div>
       )}
 
-      {/* Header */}
-      <div className="animate-fadeIn">
-        <h2 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 dark:from-purple-400 dark:to-pink-400 bg-clip-text text-transparent">
-          Submit Feedback
-        </h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Share your experience by scanning stall QR codes 📱</p>
-      </div>
+      {/* Main Content - Responsive Container */}
+      <div className="px-3 sm:px-4 lg:px-6 pb-6 space-y-4 sm:space-y-6 max-w-sm sm:max-w-2xl lg:max-w-4xl mx-auto">
 
-      {/* Event Selector */}
-      <div className="card animate-slideUp shadow-lg">
-        <label className="label flex items-center gap-2">
-          <MessageSquare className="text-purple-600 dark:text-purple-400" size={20} />
-          Select Event
-        </label>
-        <select
-          value={selectedEvent}
-          onChange={(e) => setSelectedEvent(e.target.value)}
-          className="input-field"
-        >
-          <option value="">-- Select Event --</option>
-          {events.map((event) => (
-            <option key={event.id} value={event.id}>
-              🎪 {event.name}
-            </option>
-          ))}
-        </select>
-      </div>
+        {/* Event Selector - Mobile Optimized */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-slideUp">
+          <div className="flex items-center gap-2 sm:gap-3 mb-4">
+            <div className="p-2 sm:p-2.5 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/50 dark:to-purple-800/50 rounded-lg sm:rounded-xl">
+              <MessageSquare className="text-purple-600 dark:text-purple-400 w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <h3 className="text-base sm:text-lg lg:text-xl font-bold text-gray-900 dark:text-white">Select Event</h3>
+          </div>
+          
+          <select
+            value={selectedEvent}
+            onChange={(e) => setSelectedEvent(e.target.value)}
+            className="w-full px-3 sm:px-4 py-3 sm:py-4 text-sm sm:text-base bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-gray-900 dark:text-white transition-all duration-200 appearance-none cursor-pointer shadow-sm"
+            style={{
+              backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e")`,
+              backgroundPosition: 'right 0.75rem center',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '1.5em 1.5em'
+            }}
+          >
+            <option value="">🎯 Choose an event...</option>
+            {events.map((event) => (
+              <option key={event.id} value={event.id}>
+                🎪 {event.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
       {selectedEvent && (
         <>
-          {/* Check-in Status Warning */}
+          {/* Check-in Status Warning - Mobile Responsive */}
           {!status?.isCheckedIn && (
-            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-600 rounded-2xl p-6 flex items-start space-x-3 shadow-lg animate-scaleIn">
-              <AlertCircle className="w-6 h-6 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 dark:border-yellow-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 flex items-start space-x-3 shadow-lg animate-scaleIn">
+              <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
               <div>
-                <h4 className="font-bold text-yellow-900 dark:text-yellow-100 text-lg">Not Checked In</h4>
-                <p className="text-sm text-yellow-800 dark:text-yellow-300 mt-1">
+                <h4 className="font-bold text-yellow-900 dark:text-yellow-100 text-base sm:text-lg">Not Checked In</h4>
+                <p className="text-sm sm:text-base text-yellow-800 dark:text-yellow-300 mt-1 leading-relaxed">
                   You must check-in to the event before submitting feedback. Please show your QR code at the gate! 🚪
                 </p>
               </div>
             </div>
           )}
 
-          {/* QR Scanner Section */}
-          <div className="card shadow-xl animate-slideUp border-2 border-purple-200 dark:border-purple-700">
-            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2 text-gray-900 dark:text-white">
-              <Scan className="text-purple-600 dark:text-purple-400" size={28} />
-              Scan Stall QR Code
-            </h3>
+          {/* QR Scanner Section - Mobile Optimized */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl border-2 border-purple-200 dark:border-purple-700 p-4 sm:p-6 animate-slideUp">
+            <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-2.5 bg-gradient-to-br from-purple-100 to-purple-200 dark:from-purple-900/50 dark:to-purple-800/50 rounded-lg sm:rounded-xl">
+                <Scan className="text-purple-600 dark:text-purple-400 w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">Scan Stall QR Code</h3>
+            </div>
             
             {!showScanner && !scannedStall && (
-              <div className="space-y-3">
+              <div className="space-y-3 sm:space-y-4">
                 <button
                   onClick={() => {
                     console.log('[Feedback QR] Opening scanner...');
@@ -453,95 +491,102 @@ export default function StudentFeedback() {
                     setShowScanner(true);
                   }}
                   disabled={!status?.isCheckedIn}
-                  className="w-full py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-2xl font-bold text-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:scale-105 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="w-full py-4 sm:py-6 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg hover:from-purple-700 hover:to-pink-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform active:scale-95 sm:hover:scale-105 flex items-center justify-center gap-2 sm:gap-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:hover:scale-100 touch-manipulation"
                 >
-                  <Camera size={28} />
-                  Open Camera to Scan Stall QR
+                  <Camera className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="hidden sm:inline">Open Camera to Scan Stall QR</span>
+                  <span className="sm:hidden">Scan QR Code</span>
                 </button>
                 {!status?.isCheckedIn && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 text-center">
-                    ⚠️ You must check-in first to scan stall QR codes
-                  </p>
+                  <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg p-3">
+                    <p className="text-sm sm:text-base text-red-700 dark:text-red-300 text-center font-medium">
+                      ⚠️ You must check-in first to scan stall QR codes
+                    </p>
+                  </div>
                 )}
                 <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-600 rounded-lg p-3">
-                  <p className="text-xs text-blue-800 dark:text-blue-200 text-center">
-                    📱 <strong>Note:</strong> QR scanning requires a device with a camera (mobile phone, tablet, or laptop with webcam)
+                  <p className="text-xs sm:text-sm text-blue-800 dark:text-blue-200 text-center">
+                    📱 <strong>Note:</strong> QR scanning requires a device with a camera (mobile, tablet, or laptop with webcam)
                   </p>
                 </div>
               </div>
             )}
 
             {showScanner && (
-              <div className="space-y-4 animate-fadeIn">
-                <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-600 rounded-xl p-4 mb-3">
-                  <p className="text-sm text-blue-800 dark:text-blue-200 font-medium text-center">
+              <div className="space-y-3 sm:space-y-4 animate-fadeIn">
+                <div className="bg-blue-50 dark:bg-blue-900/30 border-2 border-blue-300 dark:border-blue-600 rounded-lg sm:rounded-xl p-3 sm:p-4">
+                  <p className="text-sm sm:text-base text-blue-800 dark:text-blue-200 font-medium text-center">
                     📱 Point your camera at the stall's QR code
-                    <br />
-                    <span className="text-xs opacity-75">Keep the QR code within the frame and hold steady</span>
+                  </p>
+                  <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300 opacity-75 text-center mt-1">
+                    Keep the QR code within the frame and hold steady
                   </p>
                 </div>
 
-                <div id="qr-reader" className="mb-4"></div>
+                {/* QR Reader Container - Mobile Responsive */}
+                <div className="relative">
+                  <div id="qr-reader" className="rounded-lg sm:rounded-xl overflow-hidden mb-4 bg-gray-100 dark:bg-gray-700 min-h-[250px] sm:min-h-[300px]"></div>
+                </div>
                 
                 <button
                   onClick={cancelScan}
-                  className="w-full py-4 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg"
+                  className="w-full py-3 sm:py-4 bg-red-600 text-white rounded-lg sm:rounded-xl font-semibold text-sm sm:text-base hover:bg-red-700 transition-all duration-300 flex items-center justify-center gap-2 shadow-lg touch-manipulation active:scale-95"
                 >
-                  <X size={20} />
+                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
                   Cancel Scan
                 </button>
               </div>
             )}
 
             {scannedStall && (
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-400 dark:border-green-600 rounded-2xl p-6 animate-scaleIn">
-                <div className="flex items-center justify-between">
-                  <div>
+              <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-400 dark:border-green-600 rounded-xl sm:rounded-2xl p-4 sm:p-6 animate-scaleIn">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <CheckCircle className="text-green-600 dark:text-green-400" size={24} />
-                      <h4 className="font-bold text-green-900 dark:text-green-100 text-lg">Stall Scanned Successfully!</h4>
+                      <CheckCircle className="text-green-600 dark:text-green-400 w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" />
+                      <h4 className="font-bold text-green-900 dark:text-green-100 text-sm sm:text-base lg:text-lg">Stall Scanned Successfully!</h4>
                     </div>
-                    <p className="text-2xl font-bold text-green-800 dark:text-green-200">{scannedStall.name}</p>
-                    <p className="text-green-700 dark:text-green-300">{scannedStall.department}</p>
+                    <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-800 dark:text-green-200 mb-1">{scannedStall.name}</p>
+                    <p className="text-sm sm:text-base text-green-700 dark:text-green-300">{scannedStall.department}</p>
                   </div>
                   <button
                     onClick={() => {
                       setScannedStall(null);
                       setScanValidation(null);
                     }}
-                    className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-full transition-colors"
+                    className="p-2 hover:bg-green-200 dark:hover:bg-green-800 rounded-full transition-colors touch-manipulation flex-shrink-0"
                     title="Scan different stall"
                   >
-                    <X className="text-green-700 dark:text-green-300" size={24} />
+                    <X className="text-green-700 dark:text-green-300 w-5 h-5 sm:w-6 sm:h-6" />
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Show last scan validation if scanner is closed and no stall selected */}
+            {/* Show last scan validation - Mobile Responsive */}
             {!showScanner && !scannedStall && scanValidation && (
               <div 
-                className={`p-4 rounded-xl border-2 animate-fadeIn ${
+                className={`p-3 sm:p-4 rounded-lg sm:rounded-xl border-2 animate-fadeIn ${
                   scanValidation.status === 'valid'
                     ? 'bg-green-50 dark:bg-green-900/30 border-green-400 dark:border-green-600'
                     : 'bg-red-50 dark:bg-red-900/30 border-red-400 dark:border-red-600'
                 }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-2 sm:gap-3">
                   {scanValidation.status === 'valid' ? (
-                    <CheckCircle className="w-6 h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
+                    <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" />
                   ) : (
-                    <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                   )}
-                  <div className="flex-1">
-                    <h4 className={`font-bold text-lg mb-1 ${
+                  <div className="flex-1 min-w-0">
+                    <h4 className={`font-bold text-sm sm:text-base lg:text-lg mb-1 ${
                       scanValidation.status === 'valid'
                         ? 'text-green-900 dark:text-green-100'
                         : 'text-red-900 dark:text-red-100'
                     }`}>
                       {scanValidation.message}
                     </h4>
-                    <p className={`text-sm ${
+                    <p className={`text-xs sm:text-sm leading-relaxed ${
                       scanValidation.status === 'valid'
                         ? 'text-green-800 dark:text-green-200'
                         : 'text-red-800 dark:text-red-200'
@@ -558,14 +603,14 @@ export default function StudentFeedback() {
                   </div>
                   <button
                     onClick={() => setScanValidation(null)}
-                    className={`p-1 rounded-full transition-colors ${
+                    className={`p-1 sm:p-1.5 rounded-full transition-colors touch-manipulation flex-shrink-0 ${
                       scanValidation.status === 'valid'
                         ? 'hover:bg-green-200 dark:hover:bg-green-800'
                         : 'hover:bg-red-200 dark:hover:bg-red-800'
                     }`}
                     title="Dismiss"
                   >
-                    <X className={`w-5 h-5 ${
+                    <X className={`w-4 h-4 sm:w-5 sm:h-5 ${
                       scanValidation.status === 'valid'
                         ? 'text-green-700 dark:text-green-300'
                         : 'text-red-700 dark:text-red-300'
@@ -578,9 +623,9 @@ export default function StudentFeedback() {
                       setScanValidation(null);
                       setShowScanner(true);
                     }}
-                    className="mt-3 w-full py-2 bg-purple-600 text-white rounded-lg font-semibold hover:bg-purple-700 transition-colors flex items-center justify-center gap-2"
+                    className="mt-3 w-full py-2 sm:py-3 bg-purple-600 text-white rounded-lg font-semibold text-sm sm:text-base hover:bg-purple-700 transition-colors flex items-center justify-center gap-2 touch-manipulation active:scale-95"
                   >
-                    <Camera size={18} />
+                    <Camera className="w-4 h-4 sm:w-5 sm:h-5" />
                     Try Scanning Again
                   </button>
                 )}
@@ -588,32 +633,40 @@ export default function StudentFeedback() {
             )}
           </div>
 
-          {/* Feedback Form */}
+          {/* Feedback Form - Mobile Optimized */}
           {scannedStall && (
-            <div className="card shadow-xl animate-fadeIn border-2 border-pink-200 dark:border-pink-700">
-              <h3 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
-                <Star className="text-yellow-500" size={28} />
-                Your Feedback for {scannedStall.name}
-              </h3>
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Star Rating */}
+            <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl border-2 border-pink-200 dark:border-pink-700 p-4 sm:p-6 animate-fadeIn">
+              <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+                <div className="p-2 sm:p-2.5 bg-gradient-to-br from-yellow-100 to-orange-100 dark:from-yellow-900/50 dark:to-orange-800/50 rounded-lg sm:rounded-xl">
+                  <Star className="text-yellow-500 w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
                 <div>
-                  <label className="label">
+                  <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">Your Feedback</h3>
+                  <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">{scannedStall.name}</p>
+                </div>
+              </div>
+              
+              <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
+                {/* Star Rating - Mobile Responsive */}
+                <div>
+                  <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 sm:mb-3">
                     Rating (1-5 stars) <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex items-center space-x-2 justify-center bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-6 rounded-2xl">
+                  <div className="flex items-center justify-center space-x-1 sm:space-x-2 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-4 sm:p-6 rounded-xl sm:rounded-2xl">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
                         key={star}
                         type="button"
                         onClick={() => setRating(star)}
+                        onTouchStart={() => setHoverRating(star)}
+                        onTouchEnd={() => setHoverRating(0)}
                         onMouseEnter={() => setHoverRating(star)}
                         onMouseLeave={() => setHoverRating(0)}
-                        className="focus:outline-none transition-transform hover:scale-125 active:scale-110"
+                        className="focus:outline-none transition-transform active:scale-110 sm:hover:scale-125 touch-manipulation p-1"
                         disabled={!status?.isCheckedIn}
                       >
                         <Star
-                          className={`w-14 h-14 transition-all duration-200 ${
+                          className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 transition-all duration-200 ${
                             star <= (hoverRating || rating)
                               ? 'text-yellow-500 fill-yellow-500 drop-shadow-lg'
                               : 'text-gray-300 dark:text-gray-600'
@@ -629,26 +682,26 @@ export default function StudentFeedback() {
                   )}
                 </div>
 
-                {/* Comment */}
+                {/* Comment - Mobile Responsive */}
                 <div>
-                  <label className="label">
+                  <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 sm:mb-3">
                     Your Comments (Optional)
                   </label>
                   <textarea
                     value={comment}
                     onChange={(e) => setComment(e.target.value)}
-                    rows={5}
+                    rows={4}
+                    className="w-full px-3 sm:px-4 py-3 sm:py-4 text-sm sm:text-base bg-white dark:bg-gray-700 border-2 border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-pink-500 text-gray-900 dark:text-white transition-all duration-200 resize-none"
                     maxLength={500}
-                    className="input-field resize-none"
                     placeholder="What did you like? What could be improved? Share your thoughts..."
                     disabled={!status?.isCheckedIn}
                   />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-right">
+                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-2 text-right">
                     {comment.length} / 500 characters
                   </p>
                 </div>
 
-                {/* Submit Button */}
+                {/* Submit Button - Mobile Responsive */}
                 <button
                   type="submit"
                   disabled={
@@ -657,9 +710,9 @@ export default function StudentFeedback() {
                     feedbackMutation.isLoading ||
                     !status?.isCheckedIn
                   }
-                  className="w-full py-5 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-2xl font-bold text-lg hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform hover:scale-105 flex items-center justify-center space-x-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                  className="w-full py-4 sm:py-5 lg:py-6 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl sm:rounded-2xl font-bold text-base sm:text-lg lg:text-xl hover:from-green-700 hover:to-emerald-700 transition-all duration-300 shadow-lg hover:shadow-2xl transform active:scale-95 sm:hover:scale-105 flex items-center justify-center space-x-2 sm:space-x-3 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 disabled:hover:scale-100 touch-manipulation"
                 >
-                  <Send size={24} />
+                  <Send className="w-5 h-5 sm:w-6 sm:h-6" />
                   <span>
                     {feedbackMutation.isLoading ? 'Submitting...' : 'Submit Feedback'}
                   </span>
@@ -668,94 +721,103 @@ export default function StudentFeedback() {
             </div>
           )}
 
-          {/* My Feedbacks */}
-          <div className="card shadow-xl animate-slideUp">
-            <h3 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
-              <MessageSquare className="text-indigo-600 dark:text-indigo-400" size={28} />
-              My Submitted Feedbacks
-            </h3>
+          {/* My Feedbacks - Mobile Responsive */}
+          <div className="bg-white dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 p-4 sm:p-6 animate-slideUp">
+            <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-6">
+              <div className="p-2 sm:p-2.5 bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/50 dark:to-purple-800/50 rounded-lg sm:rounded-xl">
+                <MessageSquare className="text-indigo-600 dark:text-indigo-400 w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">My Submitted Feedbacks</h3>
+            </div>
+            
             {myFeedbacks.length === 0 ? (
-              <div className="text-center py-12 bg-gradient-to-br from-gray-50 to-indigo-50 dark:from-gray-800 dark:to-indigo-900/20 rounded-2xl">
-                <MessageSquare className="w-16 h-16 mx-auto mb-4 text-gray-400 dark:text-gray-600" />
-                <p className="text-gray-600 dark:text-gray-400 font-semibold text-lg">No feedbacks submitted yet</p>
-                <p className="text-sm text-gray-500 dark:text-gray-500 mt-1">Scan stall QR codes and share your experience! 🎯</p>
+              <div className="text-center py-8 sm:py-12 bg-gradient-to-br from-gray-50 to-indigo-50 dark:from-gray-800 dark:to-indigo-900/20 rounded-xl sm:rounded-2xl">
+                <MessageSquare className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-400 dark:text-gray-600" />
+                <p className="text-gray-600 dark:text-gray-400 font-semibold text-base sm:text-lg">No feedbacks submitted yet</p>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-500 mt-1 px-4">Scan stall QR codes and share your experience! 🎯</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3 sm:space-y-4">
                 {myFeedbacks.map((feedback) => (
                   <div
                     key={feedback.id}
-                    className="p-6 bg-gradient-to-r from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-2xl border-2 border-gray-200 dark:border-gray-600 shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-[1.02]"
+                    className="p-4 sm:p-6 bg-gradient-to-r from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-lg sm:rounded-2xl border border-gray-200 dark:border-gray-600 shadow-md hover:shadow-lg transition-all duration-300 transform active:scale-[0.98] sm:hover:scale-[1.02]"
                   >
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <h4 className="font-bold text-xl text-gray-900 dark:text-white">{feedback.stallId.name}</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-3">
+                      <div className="flex-1">
+                        <h4 className="font-bold text-base sm:text-lg lg:text-xl text-gray-900 dark:text-white">{feedback.stallId.name}</h4>
+                        <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
                           📍 {feedback.stallId.department}
                         </p>
                       </div>
-                      <div className="flex items-center space-x-1 bg-yellow-100 dark:bg-yellow-900/30 px-3 py-2 rounded-full">
+                      <div className="flex items-center space-x-1 bg-yellow-100 dark:bg-yellow-900/30 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full self-start">
                         {[1, 2, 3, 4, 5].map((star) => (
                           <Star
                             key={star}
-                            className={`w-5 h-5 ${
+                            className={`w-3 h-3 sm:w-4 sm:h-4 ${
                               star <= feedback.rating
                                 ? 'text-yellow-500 fill-yellow-500'
                                 : 'text-gray-300 dark:text-gray-600'
                             }`}
                           />
                         ))}
-                        <span className="ml-2 text-sm font-bold text-yellow-800 dark:text-yellow-200">
+                        <span className="ml-1 sm:ml-2 text-xs sm:text-sm font-bold text-yellow-800 dark:text-yellow-200">
                           {feedback.rating}/5
                         </span>
                       </div>
                     </div>
                     {feedback.comment && (
-                      <p className="text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900/50 p-4 rounded-xl border border-gray-200 dark:border-gray-700 italic">
-                        "{feedback.comment}"
-                      </p>
+                      <div className="mb-3">
+                        <p className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-900/50 p-3 sm:p-4 rounded-lg sm:rounded-xl border border-gray-200 dark:border-gray-700 italic leading-relaxed">
+                          "{feedback.comment}"
+                        </p>
+                      </div>
                     )}
-                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-3 flex items-center gap-2">
-                      <CheckCircle size={14} />
-                      Submitted on {new Date(feedback.createdAt).toLocaleString()}
-                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-500">
+                      <CheckCircle className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                      <span>Submitted on {new Date(feedback.createdAt).toLocaleDateString()} at {new Date(feedback.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Instructions */}
-          <div className="card bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-2 border-indigo-300 dark:border-indigo-700 shadow-lg">
-            <h3 className="font-bold text-lg mb-4 text-indigo-900 dark:text-indigo-100 flex items-center gap-2">
-              <AlertCircle size={24} />
-              How to Submit Feedback
-            </h3>
-            <ul className="text-sm text-indigo-800 dark:text-indigo-200 space-y-3">
-              <li className="flex items-start gap-3">
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-lg">1.</span>
-                <span><strong>Scan the stall's QR code</strong> displayed at their booth</span>
+          {/* Instructions - Mobile Responsive */}
+          <div className="bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-2 border-indigo-300 dark:border-indigo-700 rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-6">
+            <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <div className="p-2 bg-indigo-100 dark:bg-indigo-800 rounded-lg">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <h3 className="font-bold text-base sm:text-lg lg:text-xl text-indigo-900 dark:text-indigo-100">How to Submit Feedback</h3>
+            </div>
+            
+            <ul className="text-xs sm:text-sm lg:text-base text-indigo-800 dark:text-indigo-200 space-y-2 sm:space-y-3">
+              <li className="flex items-start gap-2 sm:gap-3">
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-sm sm:text-base lg:text-lg flex-shrink-0 bg-indigo-100 dark:bg-indigo-800 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">1</span>
+                <span className="leading-relaxed"><strong>Scan the stall's QR code</strong> displayed at their booth</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-lg">2.</span>
-                <span><strong>Rate your experience</strong> from 1 to 5 stars</span>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-sm sm:text-base lg:text-lg flex-shrink-0 bg-indigo-100 dark:bg-indigo-800 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">2</span>
+                <span className="leading-relaxed"><strong>Rate your experience</strong> from 1 to 5 stars</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-lg">3.</span>
-                <span><strong>Add comments</strong> (optional but appreciated!)</span>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-sm sm:text-base lg:text-lg flex-shrink-0 bg-indigo-100 dark:bg-indigo-800 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">3</span>
+                <span className="leading-relaxed"><strong>Add comments</strong> (optional but appreciated!)</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-lg">4.</span>
-                <span><strong>Submit</strong> - You can only give one feedback per stall</span>
+              <li className="flex items-start gap-2 sm:gap-3">
+                <span className="text-indigo-600 dark:text-indigo-400 font-bold text-sm sm:text-base lg:text-lg flex-shrink-0 bg-indigo-100 dark:bg-indigo-800 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center">4</span>
+                <span className="leading-relaxed"><strong>Submit</strong> - You can only give one feedback per stall</span>
               </li>
-              <li className="flex items-start gap-3">
-                <span className="text-red-500 font-bold text-lg">⚠️</span>
-                <span><strong>Important:</strong> You must be checked-in to submit feedback</span>
+              <li className="flex items-start gap-2 sm:gap-3 bg-red-50 dark:bg-red-900/20 p-2 sm:p-3 rounded-lg border border-red-200 dark:border-red-700">
+                <span className="text-red-500 font-bold text-sm sm:text-base flex-shrink-0">⚠️</span>
+                <span className="leading-relaxed text-red-700 dark:text-red-300"><strong>Important:</strong> You must be checked-in to submit feedback</span>
               </li>
             </ul>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
