@@ -888,45 +888,69 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
       });
     }
 
-    // Query to calculate stay time with engagement metrics
-    const results = await sequelize.query(
-      `
-      SELECT 
-        u.id,
-        u.name,
-        u."rollNumber",
-        u.department,
-        u.email,
-        u.phone,
-        a."checkInTime",
-        a."checkOutTime",
-        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 3600 as "stayTimeHours",
-        EXTRACT(EPOCH FROM (a."checkOutTime" - a."checkInTime")) / 60 as "stayTimeMinutes",
-        (SELECT COUNT(*) FROM votes WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalVotes",
-        (SELECT COUNT(*) FROM feedbacks WHERE "studentId" = u.id AND "eventId" = :eventId) as "totalFeedbacks"
-      FROM attendances a
-      INNER JOIN users u ON a."studentId" = u.id
-      WHERE a."eventId" = :eventId
-        AND a."checkOutTime" IS NOT NULL
-        AND u.role = 'student'
-      ORDER BY "stayTimeMinutes" DESC
-      LIMIT :limit
-      `,
-      {
-        replacements: { eventId, limit: parseInt(limit) },
-        type: QueryTypes.SELECT,
-      }
+    console.log('[Analytics] Fetching top students for eventId:', eventId);
+
+    // Use Sequelize models instead of raw SQL for better error handling
+    const attendances = await Attendance.findAll({
+      where: {
+        eventId,
+        checkOutTime: { [Op.ne]: null }
+      },
+      include: [{
+        model: User,
+        as: 'student',
+        where: { role: 'student' },
+        attributes: ['id', 'name', 'rollNumber', 'department', 'email', 'phone']
+      }],
+      attributes: ['checkInTime', 'checkOutTime'],
+      limit: parseInt(limit) * 2, // Get more records to sort properly
+      order: [[sequelize.literal('("checkOutTime" - "checkInTime")'), 'DESC']]
+    });
+
+    // Calculate stay time and engagement metrics
+    const results = await Promise.all(
+      attendances.slice(0, parseInt(limit)).map(async (attendance) => {
+        const stayTimeMs = new Date(attendance.checkOutTime) - new Date(attendance.checkInTime);
+        const stayTimeMinutes = stayTimeMs / (1000 * 60);
+        const stayTimeHours = stayTimeMinutes / 60;
+
+        // Get engagement metrics
+        const [totalVotes, totalFeedbacks] = await Promise.all([
+          Vote.count({ where: { studentId: attendance.student.id, eventId } }),
+          Feedback.count({ where: { studentId: attendance.student.id, eventId } })
+        ]);
+
+        return {
+          id: attendance.student.id,
+          name: attendance.student.name,
+          rollNumber: attendance.student.rollNumber,
+          department: attendance.student.department,
+          email: attendance.student.email,
+          phone: attendance.student.phone,
+          checkInTime: attendance.checkInTime,
+          checkOutTime: attendance.checkOutTime,
+          stayTimeHours: Math.round(stayTimeHours * 100) / 100,
+          stayTimeMinutes: Math.round(stayTimeMinutes * 100) / 100,
+          totalVotes,
+          totalFeedbacks
+        };
+      })
     );
 
-    console.log('[Analytics] Top students by stay time:', results.length, 'students');
+    console.log('[Analytics] Top students by stay time:', results.length, 'students found');
 
     res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
-    console.error('[Analytics] Top students error:', error);
-    next(error);
+    console.error('[Analytics] Top students error:', error.message);
+    console.error('[Analytics] Stack trace:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch top students data',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
 
@@ -934,37 +958,72 @@ exports.getMostReviewers = async (req, res, next) => {
   try {
     const { eventId, limit = 10 } = req.query;
 
-    const results = await sequelize.query(
-      `
-      SELECT 
-        u.id,
-        u.name,
-        u."rollNumber",
-        u.department,
-        COUNT(DISTINCT f.id) as "feedbackCount",
-        COUNT(DISTINCT v.id) as "voteCount",
-        COUNT(DISTINCT f.id) + COUNT(DISTINCT v.id) as "totalReviews"
-      FROM users u
-      LEFT JOIN feedbacks f ON f."studentId" = u.id AND f."eventId" = :eventId
-      LEFT JOIN votes v ON v."studentId" = u.id AND v."eventId" = :eventId
-      WHERE u.role = 'student'
-      GROUP BY u.id, u.name, u."rollNumber", u.department
-      HAVING COUNT(DISTINCT f.id) + COUNT(DISTINCT v.id) > 0
-      ORDER BY "totalReviews" DESC
-      LIMIT :limit
-      `,
-      {
-        replacements: { eventId, limit: parseInt(limit) },
-        type: QueryTypes.SELECT,
-      }
-    );
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
+
+    console.log('[Analytics] Fetching most reviewers for eventId:', eventId);
+
+    // Get all students who have provided feedback or votes for this event
+    const students = await User.findAll({
+      where: { role: 'student' },
+      attributes: ['id', 'name', 'rollNumber', 'department'],
+      include: [
+        {
+          model: Feedback,
+          as: 'feedbacks',
+          where: { eventId },
+          required: false,
+          attributes: ['id']
+        },
+        {
+          model: Vote,
+          as: 'votes',
+          where: { eventId },
+          required: false,
+          attributes: ['id']
+        }
+      ]
+    });
+
+    // Calculate review counts and filter students with reviews
+    const results = students
+      .map(student => {
+        const feedbackCount = student.feedbacks ? student.feedbacks.length : 0;
+        const voteCount = student.votes ? student.votes.length : 0;
+        const totalReviews = feedbackCount + voteCount;
+
+        return {
+          id: student.id,
+          name: student.name,
+          rollNumber: student.rollNumber,
+          department: student.department,
+          feedbackCount,
+          voteCount,
+          totalReviews
+        };
+      })
+      .filter(student => student.totalReviews > 0)
+      .sort((a, b) => b.totalReviews - a.totalReviews)
+      .slice(0, parseInt(limit));
+
+    console.log('[Analytics] Most reviewers found:', results.length, 'students');
 
     res.status(200).json({
       success: true,
       data: results,
     });
   } catch (error) {
-    next(error);
+    console.error('[Analytics] Most reviewers error:', error.message);
+    console.error('[Analytics] Stack trace:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch most reviewers data',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
   }
 };
 
@@ -1115,7 +1174,14 @@ exports.getEventOverview = async (req, res, next) => {
 
 exports.exportAttendanceReport = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { eventId } = req.query; // Get from query parameters
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
 
     const attendances = await Attendance.findAll({
       where: { eventId },
@@ -1123,7 +1189,7 @@ exports.exportAttendanceReport = async (req, res, next) => {
         {
           model: User,
           as: 'student',
-          attributes: ['id', 'name', 'rollNumber', 'department'],
+          attributes: ['id', 'name', 'rollNumber', 'department', 'email'],
         },
         {
           model: Event,
@@ -1134,18 +1200,47 @@ exports.exportAttendanceReport = async (req, res, next) => {
       order: [['checkInTime', 'DESC']],
     });
 
-    res.status(200).json({
-      success: true,
-      data: attendances,
-    });
+    // Convert to CSV format
+    const csvHeader = 'Student ID,Name,Roll Number,Department,Email,Event,Check In Time,Check Out Time,Duration (minutes)\n';
+    const csvData = attendances.map(attendance => {
+      const checkIn = new Date(attendance.checkInTime);
+      const checkOut = attendance.checkOutTime ? new Date(attendance.checkOutTime) : null;
+      const duration = checkOut ? Math.round((checkOut - checkIn) / (1000 * 60)) : 'N/A';
+      
+      return [
+        attendance.student.id,
+        `"${attendance.student.name}"`,
+        attendance.student.rollNumber || 'N/A',
+        `"${attendance.student.department || 'N/A'}"`,
+        attendance.student.email || 'N/A',
+        `"${attendance.event.name}"`,
+        checkIn.toISOString(),
+        checkOut ? checkOut.toISOString() : 'Still Active',
+        duration
+      ].join(',');
+    }).join('\n');
+
+    const csv = csvHeader + csvData;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="attendance_report.csv"');
+    res.send(csv);
   } catch (error) {
+    console.error('[Export] Attendance report error:', error);
     next(error);
   }
 };
 
 exports.exportFeedbackReport = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { eventId } = req.query; // Get from query parameters for consistency
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
 
     const feedbacks = await Feedback.findAll({
       where: { eventId },
@@ -1164,18 +1259,43 @@ exports.exportFeedbackReport = async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.status(200).json({
-      success: true,
-      data: feedbacks,
-    });
+    // Convert to CSV format
+    const csvHeader = 'Feedback ID,Student ID,Student Name,Roll Number,Stall Name,Category,Rating,Comment,Created At\n';
+    const csvData = feedbacks.map(feedback => {
+      return [
+        feedback.id,
+        feedback.student.id,
+        `"${feedback.student.name}"`,
+        feedback.student.rollNumber || 'N/A',
+        `"${feedback.stall.name}"`,
+        `"${feedback.stall.category || 'N/A'}"`,
+        feedback.rating,
+        `"${feedback.comment ? feedback.comment.replace(/"/g, '""') : 'N/A'}"`,
+        new Date(feedback.createdAt).toISOString()
+      ].join(',');
+    }).join('\n');
+
+    const csv = csvHeader + csvData;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="feedback_report.csv"');
+    res.send(csv);
   } catch (error) {
+    console.error('[Export] Feedback report error:', error);
     next(error);
   }
 };
 
 exports.exportVoteReport = async (req, res, next) => {
   try {
-    const { eventId } = req.params;
+    const { eventId } = req.query; // Get from query parameters for consistency
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
 
     const votes = await Vote.findAll({
       where: { eventId },
@@ -1194,11 +1314,27 @@ exports.exportVoteReport = async (req, res, next) => {
       order: [['createdAt', 'DESC']],
     });
 
-    res.status(200).json({
-      success: true,
-      data: votes,
-    });
+    // Convert to CSV format
+    const csvHeader = 'Vote ID,Student ID,Student Name,Roll Number,Stall Name,Category,Created At\n';
+    const csvData = votes.map(vote => {
+      return [
+        vote.id,
+        vote.student.id,
+        `"${vote.student.name}"`,
+        vote.student.rollNumber || 'N/A',
+        `"${vote.stall.name}"`,
+        `"${vote.stall.category || 'N/A'}"`,
+        new Date(vote.createdAt).toISOString()
+      ].join(',');
+    }).join('\n');
+
+    const csv = csvHeader + csvData;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="vote_report.csv"');
+    res.send(csv);
   } catch (error) {
+    console.error('[Export] Vote report error:', error);
     next(error);
   }
 };

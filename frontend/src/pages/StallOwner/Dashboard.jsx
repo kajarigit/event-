@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { stallOwnerApi } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +19,10 @@ export default function StallOwnerDashboard() {
   const [previousLeaderboard, setPreviousLeaderboard] = useState([]);
   const [showQR, setShowQR] = useState(false);
   const [rankChanges, setRankChanges] = useState({}); // Track position changes for each stall
+  
+  // Refs to track previous counts for notifications (to avoid stale closures)
+  const prevVoteCountRef = useRef(0);
+  const prevFeedbackCountRef = useRef(0);
 
   useEffect(() => {
     const stored = localStorage.getItem('stallData');
@@ -110,14 +114,16 @@ export default function StallOwnerDashboard() {
     refetchInterval: 5000,
     enabled: !!stallData,
     onSuccess: (data) => {
-      // Show notification for new votes
-      if (liveVotes && data.totalVotes > liveVotes.totalVotes) {
-        const newVotesCount = data.totalVotes - liveVotes.totalVotes;
+      // Show notification for new votes using ref to avoid stale closure
+      const currentCount = data.totalVotes || 0;
+      if (prevVoteCountRef.current > 0 && currentCount > prevVoteCountRef.current) {
+        const newVotesCount = currentCount - prevVoteCountRef.current;
         toast.success(`🎉 ${newVotesCount} new vote${newVotesCount > 1 ? 's' : ''}!`, {
           duration: 3000,
           icon: '🗳️',
         });
       }
+      prevVoteCountRef.current = currentCount;
     },
   });
 
@@ -131,14 +137,16 @@ export default function StallOwnerDashboard() {
     refetchInterval: 5000,
     enabled: !!stallData,
     onSuccess: (data) => {
-      // Show notification for new feedbacks
-      if (liveFeedbacks && data.stats.totalFeedbacks > liveFeedbacks.stats.totalFeedbacks) {
-        const newFeedbacksCount = data.stats.totalFeedbacks - liveFeedbacks.stats.totalFeedbacks;
+      // Show notification for new feedbacks using ref to avoid stale closure
+      const currentCount = data.stats?.totalFeedbacks || data.totalFeedbacks || 0;
+      if (prevFeedbackCountRef.current > 0 && currentCount > prevFeedbackCountRef.current) {
+        const newFeedbacksCount = currentCount - prevFeedbackCountRef.current;
         toast.success(`💬 ${newFeedbacksCount} new feedback${newFeedbacksCount > 1 ? 's' : ''}!`, {
           duration: 3000,
           icon: '⭐',
         });
       }
+      prevFeedbackCountRef.current = currentCount;
     },
   });
 
@@ -270,25 +278,63 @@ export default function StallOwnerDashboard() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         {/* QR Code Modal */}
-        {showQR && myStall?.qrCode && (
+        {showQR && (
           <div className="card shadow-2xl bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-blue-900/20 border-4 border-blue-500 animate-scaleIn">
             <div className="text-center">
               <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Your Stall QR Code</h2>
               <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Display this QR code so students can scan it to give feedback and votes
               </p>
-              <div className="bg-white p-6 rounded-2xl inline-block shadow-xl">
-                <img src={myStall.qrCode} alt="Stall QR Code" className="w-80 h-80" />
+              
+              {/* QR Code Display with Error Handling */}
+              {myStall?.qrCode ? (
+                <div className="bg-white p-6 rounded-2xl inline-block shadow-xl">
+                  <img 
+                    src={myStall.qrCode} 
+                    alt="Stall QR Code" 
+                    className="w-80 h-80"
+                    onError={(e) => {
+                      console.error('QR Code image failed to load:', e);
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-2xl inline-block shadow-xl w-80 h-80 flex items-center justify-center">
+                  <div className="text-center">
+                    <QrCode size={48} className="mx-auto mb-4 text-gray-400" />
+                    <p className="text-gray-600 dark:text-gray-400">
+                      QR Code is being generated...
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                      Please wait a moment
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {myStall && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4 font-mono bg-gray-100 dark:bg-gray-900 p-3 rounded-lg inline-block">
+                  {myStall.name} • {myStall.department}
+                </p>
+              )}
+              
+              <div className="flex gap-4 justify-center mt-6">
+                <button
+                  onClick={() => setShowQR(false)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-gray-600 text-white rounded-xl font-semibold hover:bg-gray-700 transition-colors"
+                  title="Refresh to regenerate QR code"
+                >
+                  <RefreshCw size={16} className="inline mr-2" />
+                  Refresh
+                </button>
               </div>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-4 font-mono bg-gray-100 dark:bg-gray-900 p-3 rounded-lg inline-block">
-                {myStall.name} • {myStall.department}
-              </p>
-              <button
-                onClick={() => setShowQR(false)}
-                className="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-              >
-                Close
-              </button>
             </div>
           </div>
         )}
