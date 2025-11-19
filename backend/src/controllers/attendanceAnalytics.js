@@ -1,4 +1,4 @@
-const { Event, Attendance, User, Vote, Feedback } = require('../models/index.sequelize');
+const { Event, Attendance, User, Vote, Feedback, sequelize } = require('../models/index.sequelize');
 const { Op } = require('sequelize');
 
 /**
@@ -29,16 +29,20 @@ exports.getComprehensiveAttendance = async (req, res, next) => {
     }
 
     // Get all attendance records for the event
+    console.log('[Analytics] Fetching attendance records with associations...');
     const attendances = await Attendance.findAll({
       where: { eventId },
       include: [{
         model: User,
         as: 'student',
         where: { role: 'student' },
-        attributes: ['id', 'name', 'rollNumber', 'department', 'email']
+        attributes: ['id', 'name', 'rollNumber', 'department', 'email'],
+        required: true
       }],
-      order: [['student', 'name', 'ASC'], ['checkInTime', 'ASC']]
+      order: [['checkInTime', 'ASC']]
     });
+    
+    console.log(`[Analytics] Successfully fetched ${attendances.length} attendance records`);
 
     console.log(`[Analytics] Found ${attendances.length} attendance records`);
 
