@@ -875,6 +875,56 @@ exports.bulkUploadUsers = async (req, res, next) => {
 };
 
 /**
+ * DIAGNOSTICS - Simple data check
+ */
+exports.getAnalyticsDiagnostics = async (req, res, next) => {
+  try {
+    const { eventId = 1 } = req.query;
+    
+    console.log('[Diagnostics] Checking data for eventId:', eventId);
+    
+    // Simple counts without associations to avoid errors
+    const [attendanceCount, feedbackCount, voteCount, stallCount, userCount] = await Promise.all([
+      Attendance.count({ where: { eventId } }),
+      Feedback.count({ where: { eventId } }),
+      Vote.count({ where: { eventId } }),
+      Stall.count({ where: { eventId } }),
+      User.count({ where: { role: 'student' } })
+    ]);
+
+    // Get sample data
+    const sampleAttendance = await Attendance.findOne({ 
+      where: { eventId },
+      attributes: ['id', 'studentId', 'eventId', 'checkInTime', 'checkOutTime'],
+      limit: 1
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        eventId,
+        counts: {
+          attendances: attendanceCount,
+          feedbacks: feedbackCount,
+          votes: voteCount,
+          stalls: stallCount,
+          students: userCount
+        },
+        sampleAttendance,
+        diagnosis: attendanceCount > 0 ? 'Data exists - check associations' : 'No attendance data for this event'
+      }
+    });
+  } catch (error) {
+    console.error('[Diagnostics] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Diagnostics failed',
+      error: error.message
+    });
+  }
+};
+
+/**
  * REPORTS & ANALYTICS
  */
 exports.getTopStudentsByStayTime = async (req, res, next) => {

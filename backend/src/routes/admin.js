@@ -53,6 +53,7 @@ router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
 // Analytics
+router.get('/analytics/diagnostics', adminController.getAnalyticsDiagnostics);
 router.get('/analytics/top-students', adminController.getTopStudentsByStayTime);
 router.get('/analytics/most-reviewers', adminController.getMostReviewers);
 router.get('/analytics/top-stalls', adminController.getTopStallsByVotes);
