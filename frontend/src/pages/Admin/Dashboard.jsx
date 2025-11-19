@@ -18,6 +18,7 @@ import Events from './Events';
 import Stalls from './Stalls';
 import UsersManagement from './Users';
 import Analytics from './Analytics';
+import ComprehensiveAnalytics from './ComprehensiveAnalytics';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -29,6 +30,7 @@ export default function AdminDashboard() {
     { name: 'Stalls', path: 'stalls', icon: Building2 },
     { name: 'Users', path: 'users', icon: Users },
     { name: 'Analytics', path: 'analytics', icon: BarChart3 },
+    { name: 'Attendance Detail', path: 'comprehensive-analytics', icon: BarChart3 },
   ];
 
   const toggleSidebar = () => {
@@ -138,6 +140,7 @@ export default function AdminDashboard() {
             <Route path="stalls" element={<Stalls />} />
             <Route path="users" element={<UsersManagement />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="comprehensive-analytics" element={<ComprehensiveAnalytics />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>
         </div>

@@ -1,5 +1,6 @@
 const express = require('express');
 const adminController = require('../controllers/adminController.sequelize');
+const attendanceAnalytics = require('../controllers/attendanceAnalytics');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const multer = require('multer');
@@ -52,7 +53,12 @@ router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
-// Analytics
+// Analytics - New Comprehensive System
+router.get('/analytics/attendance-comprehensive', attendanceAnalytics.getComprehensiveAttendance);
+router.get('/analytics/student-history/:studentId', attendanceAnalytics.getStudentAttendanceHistory);
+router.get('/analytics/department-attendance', attendanceAnalytics.getDepartmentAttendanceStats);
+
+// Analytics - Legacy (keeping for backward compatibility)
 router.get('/analytics/diagnostics', adminController.getAnalyticsDiagnostics);
 router.get('/analytics/detailed-attendance', adminController.getDetailedAttendanceAnalytics);
 router.get('/analytics/top-students', adminController.getTopStudentsByStayTime);
