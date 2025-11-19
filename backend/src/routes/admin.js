@@ -1,7 +1,7 @@
 const express = require('express');
 const adminController = require('../controllers/adminController.sequelize');
 const attendanceAnalytics = require('../controllers/attendanceAnalytics');
-const simpleAttendance = require('../controllers/simpleAttendance');
+const ultraSimpleAttendance = require('../controllers/ultraSimpleAttendance');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const multer = require('multer');
@@ -54,9 +54,9 @@ router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
-// Simple Attendance Records (Direct from table)
-router.get('/attendance/event/:eventId', simpleAttendance.getEventAttendanceRecords);
-router.get('/attendance/summary', simpleAttendance.getAttendanceSummary);
+// Ultra Simple Attendance Records (No complex associations)
+router.get('/attendance/test', ultraSimpleAttendance.testAttendanceEndpoint);
+router.get('/attendance/event/:eventId', ultraSimpleAttendance.getEventAttendanceRecords);
 
 // Analytics - New Comprehensive System
 router.get('/analytics/test-comprehensive', attendanceAnalytics.testComprehensiveAnalytics);
