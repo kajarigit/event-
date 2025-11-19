@@ -54,9 +54,15 @@ router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
+const basicAttendance = require('../controllers/basicAttendance');
+
 // Ultra Simple Attendance Records (No complex associations)
 router.get('/attendance/test', ultraSimpleAttendance.testAttendanceEndpoint);
 router.get('/attendance/event/:eventId', ultraSimpleAttendance.getEventAttendanceRecords);
+
+// Basic Attendance - Step by step debugging
+router.get('/attendance/raw/:eventId', basicAttendance.getRawEventAttendance);
+router.get('/attendance/processed/:eventId', basicAttendance.getProcessedEventAttendance);
 
 // Analytics - New Comprehensive System
 router.get('/analytics/test-comprehensive', attendanceAnalytics.testComprehensiveAnalytics);
