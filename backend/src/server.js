@@ -28,7 +28,29 @@ connectDB().then(() => syncModels());
 // Middleware
 app.use(helmet()); // Security headers
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    const allowedOrigins = [
+      'https://event-frontend-zsue.onrender.com',
+      'http://localhost:3000',
+      'http://localhost:5173',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5173'
+    ];
+    
+    // Check if the environment has a specific CORS_ORIGIN set
+    if (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*') {
+      allowedOrigins.push(process.env.CORS_ORIGIN);
+    }
+    
+    if (process.env.CORS_ORIGIN === '*' || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS policy'), false);
+    }
+  },
   credentials: true,
 }));
 app.use(express.json());

@@ -1,13 +1,27 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../services/api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { TrendingUp, Users, Trophy, MessageSquare, Download } from 'lucide-react';
+import { TrendingUp, Users, Trophy, MessageSquare, Download, Activity, RefreshCw } from 'lucide-react';
 
 const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function Analytics() {
   const [selectedEvent, setSelectedEvent] = useState('');
+  const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(true);
+  const [pollingInterval, setPollingInterval] = useState(30000); // Start with 30 seconds for admin
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const dataChangeDetected = useRef(false);
+  
+  // Reset activity detection after 3 minutes of no changes
+  useEffect(() => {
+    if (dataChangeDetected.current) {
+      const resetTimer = setTimeout(() => {
+        dataChangeDetected.current = false;
+      }, 180000); // 3 minutes
+      return () => clearTimeout(resetTimer);
+    }
+  }, [dataChangeDetected.current]);
 
   // Fetch events for filter
   const { data: events = [] } = useQuery({
@@ -19,46 +33,74 @@ export default function Analytics() {
     },
   });
 
-  // Fetch analytics data with auto-refresh
-  const { data: topStudents = [] } = useQuery({
+  // Fetch analytics data with smart polling
+  const { data: topStudents = [], refetch: refetchTopStudents } = useQuery({
     queryKey: ['topStudents', selectedEvent],
     queryFn: async () => {
       const response = await adminApi.getTopStudents({ eventId: selectedEvent, limit: 10 });
+      setLastUpdated(new Date());
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false,
+    onSuccess: (data) => {
+      // Detect data changes (simplified for admin)
+      if (data.length > 0) {
+        dataChangeDetected.current = true;
+        setPollingInterval(30000); // Keep reasonable intervals for admin
+      }
+    },
   });
 
-  const { data: mostReviewers = [] } = useQuery({
+  const { data: mostReviewers = [], refetch: refetchMostReviewers } = useQuery({
     queryKey: ['mostReviewers', selectedEvent],
     queryFn: async () => {
       const response = await adminApi.getMostReviewers({ eventId: selectedEvent, limit: 10 });
+      setLastUpdated(new Date());
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false,
   });
 
-  const { data: topStalls = [] } = useQuery({
+  const { data: topStalls = [], refetch: refetchTopStalls } = useQuery({
     queryKey: ['topStalls', selectedEvent],
     queryFn: async () => {
       const response = await adminApi.getTopStalls({ eventId: selectedEvent, limit: 10 });
+      setLastUpdated(new Date());
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false,
   });
 
-  const { data: deptStats = [] } = useQuery({
+  const { data: deptStats = [], refetch: refetchDeptStats } = useQuery({
     queryKey: ['deptStats', selectedEvent],
     queryFn: async () => {
       const response = await adminApi.getDepartmentStats({ eventId: selectedEvent });
+      setLastUpdated(new Date());
       return response.data?.data || response.data || [];
     },
     enabled: !!selectedEvent,
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? pollingInterval * 2 : false, // Slower for department stats
   });
+
+  // Manual refresh function for admin analytics
+  const handleManualRefresh = async () => {
+    if (!selectedEvent) return;
+    
+    setLastUpdated(new Date());
+    try {
+      await Promise.all([
+        refetchTopStudents(),
+        refetchMostReviewers(),
+        refetchTopStalls(),
+        refetchDeptStats()
+      ]);
+    } catch (error) {
+      console.error('Failed to refresh analytics:', error);
+    }
+  };
 
   const handleExport = async (type) => {
     try {
@@ -129,9 +171,43 @@ export default function Analytics() {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h2>
-          <p className="text-gray-600 mt-1">Insights and statistics</p>
+          <p className="text-gray-600 mt-1">
+            Insights and statistics • 
+            {liveUpdatesEnabled ? (
+              <span className="text-green-600">🟢 Live updates every {Math.round(pollingInterval/1000)}s</span>
+            ) : (
+              <span className="text-red-600">🔴 Live updates disabled</span>
+            )}
+            • Last updated: {lastUpdated.toLocaleTimeString()}
+          </p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex items-center space-x-3">
+          {/* Live Updates Toggle */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
+            <Activity size={16} className={liveUpdatesEnabled ? 'text-green-500' : 'text-gray-400'} />
+            <button
+              onClick={() => setLiveUpdatesEnabled(!liveUpdatesEnabled)}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                liveUpdatesEnabled ? 'bg-green-600' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                  liveUpdatesEnabled ? 'translate-x-5' : 'translate-x-1'
+                }`}
+              />
+            </button>
+          </div>
+          
+          {/* Manual Refresh */}
+          <button
+            onClick={handleManualRefresh}
+            disabled={!selectedEvent}
+            className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <RefreshCw size={16} />
+            <span>Refresh</span>
+          </button>
           <button
             onClick={() => handleExport('attendance')}
             className="btn-secondary flex items-center space-x-2"

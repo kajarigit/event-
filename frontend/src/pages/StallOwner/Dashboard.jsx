@@ -19,6 +19,8 @@ export default function StallOwnerDashboard() {
   const [previousLeaderboard, setPreviousLeaderboard] = useState([]);
   const [showQR, setShowQR] = useState(false);
   const [rankChanges, setRankChanges] = useState({}); // Track position changes for each stall
+  const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(true); // User can toggle live updates
+  const [lastUpdated, setLastUpdated] = useState(new Date());
   
   // Refs to track previous counts for notifications (to avoid stale closures)
   const prevVoteCountRef = useRef(0);
@@ -33,36 +35,64 @@ export default function StallOwnerDashboard() {
     }
   }, [navigate]);
 
-  // Fetch my stall details with QR code (refresh every 10 seconds)
-  const { data: myStall, isLoading: loadingStall } = useQuery({
+  // Fetch my stall details with QR code (refresh every 2 minutes or when manually refreshed)
+  const { data: myStall, isLoading: loadingStall, refetch: refetchMyStall } = useQuery({
     queryKey: ['myStall'],
     queryFn: async () => {
       const response = await stallOwnerApi.getMyStall();
+      setLastUpdated(new Date());
       return response.data.data.stall;
     },
-    refetchInterval: 10000, // Refresh every 10 seconds
+    refetchInterval: liveUpdatesEnabled ? 120000 : false, // Refresh every 2 minutes if live updates enabled
     enabled: !!stallData,
   });
 
-  // Fetch department leaderboard (refresh every 5 seconds for live updates)
-  const { data: leaderboard, isLoading: loadingLeaderboard } = useQuery({
+  // Smart polling strategy: Fast initial updates, then slow down if no changes
+  const [pollingInterval, setPollingInterval] = useState(10000); // Start with 10 seconds
+  const dataChangeDetected = useRef(false);
+  
+  // Reset activity detection after 2 minutes of no changes
+  useEffect(() => {
+    if (dataChangeDetected.current) {
+      const resetTimer = setTimeout(() => {
+        dataChangeDetected.current = false;
+      }, 120000); // 2 minutes
+      return () => clearTimeout(resetTimer);
+    }
+  }, [dataChangeDetected.current]);
+
+  // Fetch department leaderboard (smart polling - adjusts based on activity)
+  const { data: leaderboard, isLoading: loadingLeaderboard, refetch: refetchLeaderboard } = useQuery({
     queryKey: ['departmentLeaderboard'],
     queryFn: async () => {
       const response = await stallOwnerApi.getDepartmentLeaderboard();
+      setLastUpdated(new Date());
       return response.data.data;
     },
-    refetchInterval: 5000, // Refresh every 5 seconds for LIVE updates
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling interval
     enabled: !!stallData,
     onSuccess: (data) => {
-      // Track rank changes for my stall
-      if (previousRank !== null && previousRank !== data.myPosition) {
+      // Detect if data actually changed
+      const hasChanges = previousRank !== null && previousRank !== data.myPosition;
+      
+      if (hasChanges) {
+        dataChangeDetected.current = true;
+        // Reset to faster polling when changes detected
+        setPollingInterval(10000); // 10 seconds
+        
+        // Track rank changes for my stall
         if (data.myPosition < previousRank) {
           toast.success(`📈 You moved up to rank #${data.myPosition}!`, { duration: 5000, icon: '🎉' });
         } else {
           toast.error(`📉 You dropped to rank #${data.myPosition}`, { duration: 5000, icon: '⚠️' });
         }
+      } else if (!dataChangeDetected.current) {
+        // Gradually slow down polling if no changes
+        setPollingInterval(prev => Math.min(prev * 1.2, 60000)); // Max 1 minute
       }
+      
       setPreviousRank(data.myPosition);
+      setLastUpdated(new Date());
 
       // Track position changes for all stalls in leaderboard
       if (previousLeaderboard.length > 0 && data.leaderboard) {
@@ -93,31 +123,35 @@ export default function StallOwnerDashboard() {
     },
   });
 
-  // Fetch competition stats (refresh every 5 seconds)
-  const { data: competitionStats } = useQuery({
+  // Fetch competition stats (refresh every 1 minute when live updates enabled)
+  const { data: competitionStats, refetch: refetchCompetitionStats } = useQuery({
     queryKey: ['competitionStats'],
     queryFn: async () => {
       const response = await stallOwnerApi.getCompetitionStats();
+      setLastUpdated(new Date());
       return response.data.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? 60000 : false, // Refresh every 1 minute if live updates enabled
     enabled: !!stallData,
   });
 
-  // Fetch live votes (refresh every 5 seconds)
+  // Fetch live votes (smart polling based on activity)
   const { data: liveVotes, refetch: refetchVotes } = useQuery({
     queryKey: ['liveVotes'],
     queryFn: async () => {
       const response = await stallOwnerApi.getLiveVotes({ limit: 20 });
+      setLastUpdated(new Date());
       return response.data.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling
     enabled: !!stallData,
     onSuccess: (data) => {
       // Show notification for new votes using ref to avoid stale closure
       const currentCount = data.totalVotes || 0;
       if (prevVoteCountRef.current > 0 && currentCount > prevVoteCountRef.current) {
         const newVotesCount = currentCount - prevVoteCountRef.current;
+        dataChangeDetected.current = true;
+        setPollingInterval(10000); // Speed up polling when activity detected
         toast.success(`🎉 ${newVotesCount} new vote${newVotesCount > 1 ? 's' : ''}!`, {
           duration: 3000,
           icon: '🗳️',
@@ -127,20 +161,23 @@ export default function StallOwnerDashboard() {
     },
   });
 
-  // Fetch live feedbacks (refresh every 5 seconds)
+  // Fetch live feedbacks (smart polling based on activity)
   const { data: liveFeedbacks, refetch: refetchFeedbacks } = useQuery({
     queryKey: ['liveFeedbacks'],
     queryFn: async () => {
       const response = await stallOwnerApi.getLiveFeedbacks({ limit: 20 });
+      setLastUpdated(new Date());
       return response.data.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling
     enabled: !!stallData,
     onSuccess: (data) => {
       // Show notification for new feedbacks using ref to avoid stale closure
       const currentCount = data.stats?.totalFeedbacks || data.totalFeedbacks || 0;
       if (prevFeedbackCountRef.current > 0 && currentCount > prevFeedbackCountRef.current) {
         const newFeedbacksCount = currentCount - prevFeedbackCountRef.current;
+        dataChangeDetected.current = true;
+        setPollingInterval(10000); // Speed up polling when activity detected
         toast.success(`💬 ${newFeedbacksCount} new feedback${newFeedbacksCount > 1 ? 's' : ''}!`, {
           duration: 3000,
           icon: '⭐',
@@ -150,16 +187,37 @@ export default function StallOwnerDashboard() {
     },
   });
 
-  // Fetch recent activity (refresh every 5 seconds)
-  const { data: recentActivity } = useQuery({
+  // Fetch recent activity (refresh every 1 minute when live updates enabled)
+  const { data: recentActivity, refetch: refetchRecentActivity } = useQuery({
     queryKey: ['recentActivity'],
     queryFn: async () => {
       const response = await stallOwnerApi.getRecentActivity({ limit: 15 });
+      setLastUpdated(new Date());
       return response.data.data;
     },
-    refetchInterval: 5000,
+    refetchInterval: liveUpdatesEnabled ? 60000 : false, // Refresh every 1 minute if live updates enabled
     enabled: !!stallData,
   });
+
+  // Manual refresh function
+  const handleManualRefresh = async () => {
+    setLastUpdated(new Date());
+    toast.promise(
+      Promise.all([
+        refetchMyStall(),
+        refetchLeaderboard(),
+        refetchCompetitionStats(),
+        refetchVotes(),
+        refetchFeedbacks(),
+        refetchRecentActivity()
+      ]),
+      {
+        loading: 'Refreshing dashboard data...',
+        success: '✅ Dashboard updated successfully!',
+        error: '❌ Failed to refresh data'
+      }
+    );
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -254,9 +312,49 @@ export default function StallOwnerDashboard() {
                 <p className="text-sm text-gray-600 dark:text-gray-400">
                   {myStall?.department || stallData?.department} • {myStall?.ownerName || stallData?.ownerName}
                 </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                  {liveUpdatesEnabled ? (
+                    <>
+                      🟢 Live updates enabled • Polling every {Math.round(pollingInterval/1000)}s • Last updated: {lastUpdated.toLocaleTimeString()}
+                      {dataChangeDetected.current && <span className="text-green-600 font-semibold"> • Activity detected!</span>}
+                    </>
+                  ) : (
+                    <>
+                      🔴 Live updates disabled • Use refresh button to update data
+                    </>
+                  )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {/* Live Updates Toggle */}
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
+                <Activity size={16} className={liveUpdatesEnabled ? 'text-green-500' : 'text-gray-400'} />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Live Updates</span>
+                <button
+                  onClick={() => setLiveUpdatesEnabled(!liveUpdatesEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    liveUpdatesEnabled ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      liveUpdatesEnabled ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {/* Manual Refresh Button */}
+              <button
+                onClick={handleManualRefresh}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2"
+                title={`Last updated: ${lastUpdated.toLocaleTimeString()}`}
+              >
+                <RefreshCw size={16} />
+                Refresh
+              </button>
+
               <button
                 onClick={() => setShowQR(!showQR)}
                 className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center gap-2"
