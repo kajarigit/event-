@@ -891,10 +891,11 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
     console.log('[Analytics] Fetching top students for eventId:', eventId);
 
     // Use Sequelize models instead of raw SQL for better error handling
+    // Include both checked-in and checked-out students
     const attendances = await Attendance.findAll({
       where: {
-        eventId,
-        checkOutTime: { [Op.ne]: null }
+        eventId
+        // Removed checkOutTime restriction to include currently checked-in students
       },
       include: [{
         model: User,
@@ -903,14 +904,18 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
         attributes: ['id', 'name', 'rollNumber', 'department', 'email', 'phone']
       }],
       attributes: ['checkInTime', 'checkOutTime'],
-      limit: parseInt(limit) * 2, // Get more records to sort properly
-      order: [[sequelize.literal('("checkOutTime" - "checkInTime")'), 'DESC']]
+      limit: parseInt(limit) * 3, // Get more records to sort properly
+      order: [['checkInTime', 'DESC']] // Order by check-in time instead
     });
+
+    console.log('[Analytics] Found attendances:', attendances.length);
 
     // Calculate stay time and engagement metrics
     const results = await Promise.all(
       attendances.slice(0, parseInt(limit)).map(async (attendance) => {
-        const stayTimeMs = new Date(attendance.checkOutTime) - new Date(attendance.checkInTime);
+        // Calculate stay time - use current time if student hasn't checked out
+        const checkOutTime = attendance.checkOutTime ? new Date(attendance.checkOutTime) : new Date();
+        const stayTimeMs = checkOutTime - new Date(attendance.checkInTime);
         const stayTimeMinutes = stayTimeMs / (1000 * 60);
         const stayTimeHours = stayTimeMinutes / 60;
 
@@ -929,6 +934,7 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
           phone: attendance.student.phone,
           checkInTime: attendance.checkInTime,
           checkOutTime: attendance.checkOutTime,
+          status: attendance.checkOutTime ? 'checked-out' : 'still-active',
           stayTimeHours: Math.round(stayTimeHours * 100) / 100,
           stayTimeMinutes: Math.round(stayTimeMinutes * 100) / 100,
           totalVotes,
@@ -966,6 +972,17 @@ exports.getMostReviewers = async (req, res, next) => {
     }
 
     console.log('[Analytics] Fetching most reviewers for eventId:', eventId);
+
+    // First check if event exists
+    const event = await Event.findByPk(eventId);
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    console.log('[Analytics] Event found:', event.name);
 
     // Get all students who have provided feedback or votes for this event
     const students = await User.findAll({
@@ -1011,6 +1028,7 @@ exports.getMostReviewers = async (req, res, next) => {
       .slice(0, parseInt(limit));
 
     console.log('[Analytics] Most reviewers found:', results.length, 'students');
+    console.log('[Analytics] Total students checked:', students.length);
 
     res.status(200).json({
       success: true,
