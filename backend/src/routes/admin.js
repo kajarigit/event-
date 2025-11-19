@@ -1,7 +1,7 @@
 const express = require('express');
 const adminController = require('../controllers/adminController.sequelize');
 const attendanceAnalytics = require('../controllers/attendanceAnalytics');
-const simpleAttendanceController = require('../controllers/simpleAttendanceController');
+const simpleAttendance = require('../controllers/simpleAttendance');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const multer = require('multer');
@@ -55,8 +55,8 @@ router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
 // Simple Attendance Records (Direct from table)
-router.get('/attendance/event/:eventId', simpleAttendanceController.getEventAttendanceRecords);
-router.get('/attendance/student/:studentId', simpleAttendanceController.getStudentAttendanceRecords);
+router.get('/attendance/event/:eventId', simpleAttendance.getEventAttendanceRecords);
+router.get('/attendance/summary', simpleAttendance.getAttendanceSummary);
 
 // Analytics - New Comprehensive System
 router.get('/analytics/test-comprehensive', attendanceAnalytics.testComprehensiveAnalytics);
