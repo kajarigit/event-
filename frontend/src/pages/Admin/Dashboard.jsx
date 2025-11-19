@@ -19,6 +19,7 @@ import Stalls from './Stalls';
 import UsersManagement from './Users';
 import Analytics from './Analytics';
 import ComprehensiveAnalytics from './ComprehensiveAnalytics';
+import SimpleAttendance from './SimpleAttendance';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -30,6 +31,7 @@ export default function AdminDashboard() {
     { name: 'Stalls', path: 'stalls', icon: Building2 },
     { name: 'Users', path: 'users', icon: Users },
     { name: 'Analytics', path: 'analytics', icon: BarChart3 },
+    { name: 'Attendance Records', path: 'simple-attendance', icon: Users },
     { name: 'Attendance Detail', path: 'comprehensive-analytics', icon: BarChart3 },
   ];
 
@@ -140,6 +142,7 @@ export default function AdminDashboard() {
             <Route path="stalls" element={<Stalls />} />
             <Route path="users" element={<UsersManagement />} />
             <Route path="analytics" element={<Analytics />} />
+            <Route path="simple-attendance" element={<SimpleAttendance />} />
             <Route path="comprehensive-analytics" element={<ComprehensiveAnalytics />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>

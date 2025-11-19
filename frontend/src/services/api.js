@@ -156,6 +156,10 @@ export const adminApi = {
   getStudentHistory: (studentId, params) => api.get(`/admin/analytics/student-history/${studentId}`, { params }),
   getDepartmentAttendanceStats: (params) => api.get('/admin/analytics/department-attendance', { params }),
   
+  // Simple Attendance Records (Direct from table)
+  getEventAttendanceRecords: (eventId, params) => api.get(`/admin/attendance/event/${eventId}`, { params }),
+  getStudentAttendanceRecords: (studentId, params) => api.get(`/admin/attendance/student/${studentId}`, { params }),
+
   // New Comprehensive Analytics
   getComprehensiveAttendance: (params) => api.get('/admin/analytics/attendance-comprehensive', { params }),
   getStudentAttendanceHistory: (studentId, params) => api.get(`/admin/analytics/student-history/${studentId}`, { params }),
