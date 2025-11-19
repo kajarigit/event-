@@ -10,6 +10,10 @@ import {
   LogOut,
   Menu,
   X,
+  MessageSquare,
+  Vote,
+  TrendingUp,
+  Activity,
 } from 'lucide-react';
 
 // Admin sub-pages
@@ -20,6 +24,10 @@ import UsersManagement from './Users';
 import Analytics from './Analytics';
 import ComprehensiveAnalytics from './ComprehensiveAnalytics';
 import SimpleAttendance from './SimpleAttendance';
+import TopFeedbackGivers from './TopFeedbackGivers';
+import TopStallsByDepartment from './TopStallsByDepartment';
+import DepartmentAttendanceRankings from './DepartmentAttendanceRankings';
+import ScanLogManagement from './ScanLogManagement';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -32,6 +40,10 @@ export default function AdminDashboard() {
     { name: 'Users', path: 'users', icon: Users },
     { name: 'Analytics', path: 'analytics', icon: BarChart3 },
     { name: 'Attendance Records', path: 'simple-attendance', icon: Users },
+    { name: 'Top Feedback Givers', path: 'top-feedback', icon: MessageSquare },
+    { name: 'Top Stalls Rankings', path: 'top-stalls-department', icon: Vote },
+    { name: 'Department Attendance', path: 'department-attendance', icon: TrendingUp },
+    { name: 'Scan Log Management', path: 'scan-logs', icon: Activity },
     { name: 'Attendance Detail', path: 'comprehensive-analytics', icon: BarChart3 },
   ];
 
@@ -143,6 +155,10 @@ export default function AdminDashboard() {
             <Route path="users" element={<UsersManagement />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="simple-attendance" element={<SimpleAttendance />} />
+            <Route path="top-feedback" element={<TopFeedbackGivers />} />
+            <Route path="top-stalls-department" element={<TopStallsByDepartment />} />
+            <Route path="department-attendance" element={<DepartmentAttendanceRankings />} />
+            <Route path="scan-logs" element={<ScanLogManagement />} />
             <Route path="comprehensive-analytics" element={<ComprehensiveAnalytics />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>

@@ -102,6 +102,11 @@ export const volunteerApi = {
   getScanLogs: (params) => api.get('/scan/logs', { params }),
   getRecentScans: (params) => api.get('/scan/logs', { params: { ...params, limit: 20 } }),
   flagScanError: (id, data) => api.put(`/scan/logs/${id}/flag`, data),
+  
+  // Scan Analytics for Volunteers
+  getScanAnalytics: (params) => api.get('/scan/analytics', { params }),
+  getDetailedScanLogs: (params) => api.get('/scan/analytics/detailed', { params }),
+  getRealTimeActivity: (params) => api.get('/scan/analytics/real-time', { params }),
 };
 
 // Scan API (shared)
@@ -157,13 +162,34 @@ export const adminApi = {
   getDepartmentAttendanceStats: (params) => api.get('/admin/analytics/department-attendance', { params }),
   
   // Simple Attendance Records (Direct from table)
-  getEventAttendanceRecords: (eventId, params) => api.get(`/admin/attendance/event/${eventId}`, { params }),
+  getEventAttendanceRecords: (eventId, params) => api.get(`/admin/attendance/processed/${eventId}`, { params }),
   getStudentAttendanceRecords: (studentId, params) => api.get(`/admin/attendance/student/${studentId}`, { params }),
 
   // New Comprehensive Analytics
   getComprehensiveAttendance: (params) => api.get('/admin/analytics/attendance-comprehensive', { params }),
   getStudentAttendanceHistory: (studentId, params) => api.get(`/admin/analytics/student-history/${studentId}`, { params }),
   getDepartmentAttendanceStats: (params) => api.get('/admin/analytics/department-attendance', { params }),
+  
+  // Feedback Analytics
+  getTopFeedbackGivers: (eventId, params) => api.get(`/admin/analytics/top-feedback-givers/${eventId}`, { params }),
+  getFeedbackOverview: (params) => api.get('/admin/analytics/feedback-overview', { params }),
+  
+  // Stall Ranking Analytics
+  getTopStallsByDepartment: (eventId, params) => api.get(`/admin/analytics/top-stalls-by-department/${eventId}`, { params }),
+  getVotingOverview: (params) => api.get('/admin/analytics/voting-overview', { params }),
+  testVotingSystem: () => api.get('/admin/analytics/test-voting'),
+  
+  // Department Attendance Analytics
+  getDepartmentAttendanceStats: (eventId, params) => api.get(`/admin/analytics/department-attendance-stats/${eventId}`, { params }),
+  getDepartmentAttendanceDetails: (eventId, department, params) => api.get(`/admin/analytics/department-attendance-details/${eventId}/${department}`, { params }),
+  getAllEventsAttendanceSummary: (params) => api.get('/admin/analytics/all-events-attendance-summary', { params }),
+  
+  // Scan Log Analytics
+  getScanLogAnalytics: (params) => api.get('/admin/analytics/scan-logs', { params }),
+  getDetailedScanLogs: (params) => api.get('/admin/analytics/scan-logs-detailed', { params }),
+  getVolunteerPerformance: (params) => api.get('/admin/analytics/volunteer-performance', { params }),
+  getRealTimeScans: (params) => api.get('/admin/analytics/real-time-scans', { params }),
+  exportScanLogs: (params) => api.get('/admin/analytics/export-scan-logs', { params, responseType: 'blob' }),
 
   // Reports
   exportAttendance: (params) => api.get('/admin/reports/attendance', { params, responseType: 'blob' }),

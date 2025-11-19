@@ -92,7 +92,7 @@ exports.getProcessedEventAttendance = async (req, res) => {
     const studentIds = attendances.map(a => a.studentId);
     const students = await User.findAll({
       where: { id: studentIds },
-      attributes: ['id', 'name', 'rollNumber', 'department']
+      attributes: ['id', 'name', 'regNo', 'department']
     });
 
     console.log(`[Processed Attendance] Found ${students.length} students`);
@@ -103,7 +103,7 @@ exports.getProcessedEventAttendance = async (req, res) => {
       studentLookup[student.id] = {
         id: student.id,
         name: student.name,
-        rollNumber: student.rollNumber,
+        rollNumber: student.regNo,
         department: student.department
       };
     });
@@ -130,16 +130,16 @@ exports.getProcessedEventAttendance = async (req, res) => {
         completedCount++;
       }
 
-      // Calculate duration
-      let durationText = 'Active';
+      // Calculate duration for sorting and display
+      let durationMs, durationText = 'Active';
       if (checkOut) {
-        const durationMs = checkOut - checkIn;
+        durationMs = checkOut - checkIn;
         const minutes = Math.round(durationMs / (1000 * 60));
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
         durationText = hours > 0 ? `${hours}h ${remainingMinutes}m` : `${minutes}m`;
       } else {
-        const durationMs = new Date() - checkIn;
+        durationMs = new Date() - checkIn;
         const minutes = Math.round(durationMs / (1000 * 60));
         const hours = Math.floor(minutes / 60);
         const remainingMinutes = minutes % 60;
@@ -151,15 +151,29 @@ exports.getProcessedEventAttendance = async (req, res) => {
         student: student,
         checkInTime: attendance.checkInTime,
         checkOutTime: attendance.checkOutTime,
-        checkInFormatted: checkIn.toLocaleString(),
-        checkOutFormatted: checkOut ? checkOut.toLocaleString() : null,
-        duration: durationText,
+        checkInDate: checkIn.toLocaleDateString(),
+        checkInTimeFormatted: checkIn.toLocaleTimeString(),
+        checkOutDate: checkOut ? checkOut.toLocaleDateString() : null,
+        checkOutTimeFormatted: checkOut ? checkOut.toLocaleTimeString() : null,
+        durationFormatted: durationText,
+        durationMs: durationMs, // For sorting
         isActive: isActive,
         status: isActive ? 'active' : 'completed'
       });
     });
 
-    console.log('[Processed Attendance] Successfully processed records');
+    // Sort records by duration (highest time spent first)
+    // This includes both completed sessions and ongoing active sessions
+    processedRecords.sort((a, b) => {
+      return b.durationMs - a.durationMs;
+    });
+
+    // Remove durationMs field from response (only needed for sorting)
+    processedRecords.forEach(record => {
+      delete record.durationMs;
+    });
+
+    console.log('[Processed Attendance] Successfully processed and sorted records by duration');
 
     res.status(200).json({
       success: true,
@@ -169,12 +183,20 @@ exports.getProcessedEventAttendance = async (req, res) => {
           name: event.name
         },
         summary: {
-          total: processedRecords.length,
-          active: activeCount,
-          completed: completedCount,
-          uniqueStudents: students.length
+          totalRecords: processedRecords.length,
+          activeStudents: activeCount,
+          completedSessions: completedCount,
+          uniqueStudents: students.length,
+          totalHoursSpent: Math.round(processedRecords.reduce((total, record) => {
+            if (!record.isActive && record.checkOutTime) {
+              const duration = new Date(record.checkOutTime) - new Date(record.checkInTime);
+              return total + (duration / (1000 * 60 * 60));
+            }
+            return total;
+          }, 0) * 10) / 10
         },
         records: processedRecords,
+        recordCount: processedRecords.length,
         generatedAt: new Date().toISOString()
       }
     });

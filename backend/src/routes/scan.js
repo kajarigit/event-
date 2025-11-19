@@ -50,6 +50,30 @@ router.get(
   scanController.getMyRecentScans
 );
 
+// Scan analytics routes (volunteers can see their own data)
+const scanLogAnalytics = require('../controllers/scanLogAnalytics');
+
+router.get(
+  '/analytics',
+  protect,
+  authorize('volunteer', 'admin'),
+  scanLogAnalytics.getScanLogAnalytics
+);
+
+router.get(
+  '/analytics/detailed',
+  protect,
+  authorize('volunteer', 'admin'),
+  scanLogAnalytics.getDetailedScanLogs
+);
+
+router.get(
+  '/analytics/real-time',
+  protect,
+  authorize('volunteer', 'admin'),
+  scanLogAnalytics.getRealTimeScanActivity
+);
+
 router.get(
   '/logs/:id',
   protect,

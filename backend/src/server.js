@@ -42,7 +42,9 @@ app.use(cors({
     
     // Check if the environment has a specific CORS_ORIGIN set
     if (process.env.CORS_ORIGIN && process.env.CORS_ORIGIN !== '*') {
-      allowedOrigins.push(process.env.CORS_ORIGIN);
+      // Handle comma-separated origins
+      const envOrigins = process.env.CORS_ORIGIN.split(',').map(origin => origin.trim());
+      allowedOrigins.push(...envOrigins);
     }
     
     if (process.env.CORS_ORIGIN === '*' || allowedOrigins.includes(origin)) {

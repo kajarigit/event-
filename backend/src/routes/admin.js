@@ -2,6 +2,11 @@ const express = require('express');
 const adminController = require('../controllers/adminController.sequelize');
 const attendanceAnalytics = require('../controllers/attendanceAnalytics');
 const ultraSimpleAttendance = require('../controllers/ultraSimpleAttendance');
+const feedbackAnalytics = require('../controllers/feedbackAnalytics');
+const simpleFeedbackAnalytics = require('../controllers/simpleFeedbackAnalytics');
+const stallRankingAnalytics = require('../controllers/stallRankingAnalytics');
+const departmentAttendanceAnalytics = require('../controllers/departmentAttendanceAnalytics');
+const scanLogAnalytics = require('../controllers/scanLogAnalytics');
 const { protect, authorize } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const multer = require('multer');
@@ -69,6 +74,31 @@ router.get('/analytics/test-comprehensive', attendanceAnalytics.testComprehensiv
 router.get('/analytics/attendance-comprehensive', attendanceAnalytics.getComprehensiveAttendance);
 router.get('/analytics/student-history/:studentId', attendanceAnalytics.getStudentAttendanceHistory);
 router.get('/analytics/department-attendance', attendanceAnalytics.getDepartmentAttendanceStats);
+
+// Feedback Analytics
+router.get('/analytics/top-feedback-givers/:eventId', feedbackAnalytics.getTopFeedbackGivers);
+router.get('/analytics/feedback-overview', feedbackAnalytics.getFeedbackOverview);
+
+// Simple Feedback Analytics (for testing)
+router.get('/analytics/test-feedback', simpleFeedbackAnalytics.testFeedbackTable);
+router.get('/analytics/feedback-simple/:eventId', simpleFeedbackAnalytics.getSimpleFeedbackGivers);
+
+// Stall Ranking Analytics (Department-wise voting rankings)
+router.get('/analytics/test-voting', stallRankingAnalytics.testVotingSystem);
+router.get('/analytics/top-stalls-by-department/:eventId', stallRankingAnalytics.getTopStallsByDepartment);
+router.get('/analytics/voting-overview', stallRankingAnalytics.getVotingOverview);
+
+// Department Attendance Analytics (Department-wise attendance percentage rankings)
+router.get('/analytics/department-attendance-stats/:eventId', departmentAttendanceAnalytics.getDepartmentAttendanceStats);
+router.get('/analytics/department-attendance-details/:eventId/:department', departmentAttendanceAnalytics.getDepartmentAttendanceDetails);
+router.get('/analytics/all-events-attendance-summary', departmentAttendanceAnalytics.getAllEventsAttendanceSummary);
+
+// Scan Log Analytics (Volunteer activity tracking and scan monitoring)
+router.get('/analytics/scan-logs', scanLogAnalytics.getScanLogAnalytics);
+router.get('/analytics/scan-logs-detailed', scanLogAnalytics.getDetailedScanLogs);
+router.get('/analytics/volunteer-performance', scanLogAnalytics.getVolunteerPerformance);
+router.get('/analytics/real-time-scans', scanLogAnalytics.getRealTimeScanActivity);
+router.get('/analytics/export-scan-logs', scanLogAnalytics.exportScanLogs);
 
 // Analytics - Legacy (keeping for backward compatibility)
 router.get('/analytics/diagnostics', adminController.getAnalyticsDiagnostics);
