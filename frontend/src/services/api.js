@@ -143,6 +143,7 @@ export const adminApi = {
     }),
 
   // Analytics
+  getDetailedAttendance: (params) => api.get('/admin/analytics/detailed-attendance', { params }),
   getTopStudents: (params) => api.get('/admin/analytics/top-students', { params }),
   getMostReviewers: (params) => api.get('/admin/analytics/most-reviewers', { params }),
   getTopStalls: (params) => api.get('/admin/analytics/top-stalls', { params }),

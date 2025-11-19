@@ -927,6 +927,115 @@ exports.getAnalyticsDiagnostics = async (req, res, next) => {
 /**
  * REPORTS & ANALYTICS
  */
+exports.getDetailedAttendanceAnalytics = async (req, res, next) => {
+  try {
+    const { eventId, limit = 50 } = req.query;
+
+    if (!eventId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event ID is required',
+      });
+    }
+
+    console.log('[Analytics] Fetching detailed attendance for eventId:', eventId);
+
+    // Get all attendance records for the event
+    const attendances = await Attendance.findAll({
+      where: { eventId },
+      include: [{
+        model: User,
+        as: 'student',
+        where: { role: 'student' },
+        attributes: ['id', 'name', 'rollNumber', 'department', 'email']
+      }],
+      order: [['checkInTime', 'DESC']]
+    });
+
+    console.log('[Analytics] Found attendance records:', attendances.length);
+
+    // Group attendances by student and calculate cumulative time
+    const studentAttendanceMap = {};
+    
+    attendances.forEach(attendance => {
+      const studentId = attendance.student.id;
+      
+      if (!studentAttendanceMap[studentId]) {
+        studentAttendanceMap[studentId] = {
+          student: attendance.student,
+          sessions: [],
+          totalTimeMinutes: 0,
+          totalSessions: 0,
+          isCurrentlyCheckedIn: false
+        };
+      }
+
+      // Calculate session time
+      const checkInTime = new Date(attendance.checkInTime);
+      const checkOutTime = attendance.checkOutTime ? new Date(attendance.checkOutTime) : new Date();
+      const sessionMinutes = (checkOutTime - checkInTime) / (1000 * 60);
+      
+      studentAttendanceMap[studentId].sessions.push({
+        id: attendance.id,
+        checkInTime: attendance.checkInTime,
+        checkOutTime: attendance.checkOutTime,
+        status: attendance.checkOutTime ? 'completed' : 'active',
+        sessionMinutes: Math.round(sessionMinutes * 100) / 100,
+        sessionHours: Math.round((sessionMinutes / 60) * 100) / 100
+      });
+
+      studentAttendanceMap[studentId].totalTimeMinutes += sessionMinutes;
+      studentAttendanceMap[studentId].totalSessions += 1;
+      
+      if (!attendance.checkOutTime) {
+        studentAttendanceMap[studentId].isCurrentlyCheckedIn = true;
+      }
+    });
+
+    // Convert to array and sort by total time
+    const results = Object.values(studentAttendanceMap)
+      .map(studentData => ({
+        student: {
+          id: studentData.student.id,
+          name: studentData.student.name,
+          rollNumber: studentData.student.rollNumber,
+          department: studentData.student.department,
+          email: studentData.student.email
+        },
+        attendance: {
+          totalSessions: studentData.totalSessions,
+          totalTimeMinutes: Math.round(studentData.totalTimeMinutes * 100) / 100,
+          totalTimeHours: Math.round((studentData.totalTimeMinutes / 60) * 100) / 100,
+          averageSessionMinutes: Math.round((studentData.totalTimeMinutes / studentData.totalSessions) * 100) / 100,
+          isCurrentlyCheckedIn: studentData.isCurrentlyCheckedIn,
+          sessions: studentData.sessions.slice(0, 10) // Limit to last 10 sessions per student
+        }
+      }))
+      .sort((a, b) => b.attendance.totalTimeMinutes - a.attendance.totalTimeMinutes)
+      .slice(0, parseInt(limit));
+
+    console.log('[Analytics] Processed students:', results.length);
+
+    res.status(200).json({
+      success: true,
+      data: results,
+      summary: {
+        totalStudents: results.length,
+        totalAttendanceRecords: attendances.length,
+        studentsCurrentlyCheckedIn: results.filter(r => r.attendance.isCurrentlyCheckedIn).length
+      }
+    });
+  } catch (error) {
+    console.error('[Analytics] Detailed attendance error:', error.message);
+    console.error('[Analytics] Stack trace:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch detailed attendance analytics',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
 exports.getTopStudentsByStayTime = async (req, res, next) => {
   try {
     const { eventId, limit = 10 } = req.query;
@@ -940,60 +1049,75 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
 
     console.log('[Analytics] Fetching top students for eventId:', eventId);
 
-    // Use Sequelize models instead of raw SQL for better error handling
-    // Include both checked-in and checked-out students
+    // Use the detailed attendance analytics and return top students
     const attendances = await Attendance.findAll({
-      where: {
-        eventId
-        // Removed checkOutTime restriction to include currently checked-in students
-      },
+      where: { eventId },
       include: [{
         model: User,
         as: 'student',
         where: { role: 'student' },
-        attributes: ['id', 'name', 'rollNumber', 'department', 'email', 'phone']
+        attributes: ['id', 'name', 'rollNumber', 'department', 'email']
       }],
-      attributes: ['checkInTime', 'checkOutTime'],
-      limit: parseInt(limit) * 3, // Get more records to sort properly
-      order: [['checkInTime', 'DESC']] // Order by check-in time instead
+      order: [['checkInTime', 'DESC']]
     });
 
-    console.log('[Analytics] Found attendances:', attendances.length);
+    if (!attendances || attendances.length === 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        message: 'No attendance records found for this event'
+      });
+    }
 
-    // Calculate stay time and engagement metrics
-    const results = await Promise.all(
-      attendances.slice(0, parseInt(limit)).map(async (attendance) => {
-        // Calculate stay time - use current time if student hasn't checked out
-        const checkOutTime = attendance.checkOutTime ? new Date(attendance.checkOutTime) : new Date();
-        const stayTimeMs = checkOutTime - new Date(attendance.checkInTime);
-        const stayTimeMinutes = stayTimeMs / (1000 * 60);
-        const stayTimeHours = stayTimeMinutes / 60;
-
-        // Get engagement metrics
-        const [totalVotes, totalFeedbacks] = await Promise.all([
-          Vote.count({ where: { studentId: attendance.student.id, eventId } }),
-          Feedback.count({ where: { studentId: attendance.student.id, eventId } })
-        ]);
-
-        return {
-          id: attendance.student.id,
-          name: attendance.student.name,
-          rollNumber: attendance.student.rollNumber,
-          department: attendance.student.department,
-          email: attendance.student.email,
-          phone: attendance.student.phone,
-          checkInTime: attendance.checkInTime,
-          checkOutTime: attendance.checkOutTime,
-          status: attendance.checkOutTime ? 'checked-out' : 'still-active',
-          stayTimeHours: Math.round(stayTimeHours * 100) / 100,
-          stayTimeMinutes: Math.round(stayTimeMinutes * 100) / 100,
-          totalVotes,
-          totalFeedbacks
+    // Group by student and calculate total time
+    const studentTimeMap = {};
+    
+    attendances.forEach(attendance => {
+      const studentId = attendance.student.id;
+      
+      if (!studentTimeMap[studentId]) {
+        studentTimeMap[studentId] = {
+          student: attendance.student,
+          totalMinutes: 0,
+          sessions: 0
         };
-      })
+      }
+
+      const checkInTime = new Date(attendance.checkInTime);
+      const checkOutTime = attendance.checkOutTime ? new Date(attendance.checkOutTime) : new Date();
+      const minutes = (checkOutTime - checkInTime) / (1000 * 60);
+      
+      studentTimeMap[studentId].totalMinutes += minutes;
+      studentTimeMap[studentId].sessions += 1;
+    });
+
+    // Get engagement metrics and format results
+    const results = await Promise.all(
+      Object.values(studentTimeMap)
+        .sort((a, b) => b.totalMinutes - a.totalMinutes)
+        .slice(0, parseInt(limit))
+        .map(async (data) => {
+          const [totalVotes, totalFeedbacks] = await Promise.all([
+            Vote.count({ where: { studentId: data.student.id, eventId } }),
+            Feedback.count({ where: { studentId: data.student.id, eventId } })
+          ]);
+
+          return {
+            id: data.student.id,
+            name: data.student.name,
+            rollNumber: data.student.rollNumber,
+            department: data.student.department,
+            email: data.student.email,
+            stayTimeHours: Math.round((data.totalMinutes / 60) * 100) / 100,
+            stayTimeMinutes: Math.round(data.totalMinutes * 100) / 100,
+            totalSessions: data.sessions,
+            totalVotes,
+            totalFeedbacks
+          };
+        })
     );
 
-    console.log('[Analytics] Top students by stay time:', results.length, 'students found');
+    console.log('[Analytics] Top students processed:', results.length);
 
     res.status(200).json({
       success: true,
@@ -1001,7 +1125,6 @@ exports.getTopStudentsByStayTime = async (req, res, next) => {
     });
   } catch (error) {
     console.error('[Analytics] Top students error:', error.message);
-    console.error('[Analytics] Stack trace:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Failed to fetch top students data',
@@ -1023,62 +1146,76 @@ exports.getMostReviewers = async (req, res, next) => {
 
     console.log('[Analytics] Fetching most reviewers for eventId:', eventId);
 
-    // First check if event exists
-    const event = await Event.findByPk(eventId);
-    if (!event) {
-      return res.status(404).json({
-        success: false,
-        message: 'Event not found',
-      });
-    }
+    // Simplified approach: Get feedbacks and votes separately
+    const [feedbacks, votes] = await Promise.all([
+      Feedback.findAll({
+        where: { eventId },
+        include: [{
+          model: User,
+          as: 'student',
+          where: { role: 'student' },
+          attributes: ['id', 'name', 'rollNumber', 'department']
+        }],
+        attributes: ['studentId']
+      }),
+      Vote.findAll({
+        where: { eventId },
+        include: [{
+          model: User,
+          as: 'student',
+          where: { role: 'student' },
+          attributes: ['id', 'name', 'rollNumber', 'department']
+        }],
+        attributes: ['studentId']
+      })
+    ]);
 
-    console.log('[Analytics] Event found:', event.name);
+    console.log('[Analytics] Found feedbacks:', feedbacks.length, 'votes:', votes.length);
 
-    // Get all students who have provided feedback or votes for this event
-    const students = await User.findAll({
-      where: { role: 'student' },
-      attributes: ['id', 'name', 'rollNumber', 'department'],
-      include: [
-        {
-          model: Feedback,
-          as: 'feedbacks',
-          where: { eventId },
-          required: false,
-          attributes: ['id']
-        },
-        {
-          model: Vote,
-          as: 'votes',
-          where: { eventId },
-          required: false,
-          attributes: ['id']
-        }
-      ]
+    // Aggregate by student
+    const studentReviewMap = {};
+
+    // Process feedbacks
+    feedbacks.forEach(feedback => {
+      const student = feedback.student;
+      if (!studentReviewMap[student.id]) {
+        studentReviewMap[student.id] = {
+          student: student,
+          feedbackCount: 0,
+          voteCount: 0
+        };
+      }
+      studentReviewMap[student.id].feedbackCount++;
     });
 
-    // Calculate review counts and filter students with reviews
-    const results = students
-      .map(student => {
-        const feedbackCount = student.feedbacks ? student.feedbacks.length : 0;
-        const voteCount = student.votes ? student.votes.length : 0;
-        const totalReviews = feedbackCount + voteCount;
-
-        return {
-          id: student.id,
-          name: student.name,
-          rollNumber: student.rollNumber,
-          department: student.department,
-          feedbackCount,
-          voteCount,
-          totalReviews
+    // Process votes
+    votes.forEach(vote => {
+      const student = vote.student;
+      if (!studentReviewMap[student.id]) {
+        studentReviewMap[student.id] = {
+          student: student,
+          feedbackCount: 0,
+          voteCount: 0
         };
-      })
-      .filter(student => student.totalReviews > 0)
+      }
+      studentReviewMap[student.id].voteCount++;
+    });
+
+    // Convert to results array
+    const results = Object.values(studentReviewMap)
+      .map(data => ({
+        id: data.student.id,
+        name: data.student.name,
+        rollNumber: data.student.rollNumber,
+        department: data.student.department,
+        feedbackCount: data.feedbackCount,
+        voteCount: data.voteCount,
+        totalReviews: data.feedbackCount + data.voteCount
+      }))
       .sort((a, b) => b.totalReviews - a.totalReviews)
       .slice(0, parseInt(limit));
 
-    console.log('[Analytics] Most reviewers found:', results.length, 'students');
-    console.log('[Analytics] Total students checked:', students.length);
+    console.log('[Analytics] Most reviewers processed:', results.length, 'students');
 
     res.status(200).json({
       success: true,
