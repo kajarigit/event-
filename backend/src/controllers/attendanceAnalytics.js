@@ -10,36 +10,37 @@ exports.getComprehensiveAttendance = async (req, res, next) => {
   try {
     const { eventId, limit = 100 } = req.query;
 
+    console.log('[Analytics] Starting comprehensive attendance request for eventId:', eventId);
+
     if (!eventId) {
+      console.log('[Analytics] Error: No eventId provided');
       return res.status(400).json({
         success: false,
         message: 'Event ID is required',
       });
     }
 
-    console.log('[Analytics] Fetching comprehensive attendance for eventId:', eventId);
-
     // Verify event exists
+    console.log('[Analytics] Verifying event exists...');
     const event = await Event.findByPk(eventId);
     if (!event) {
+      console.log('[Analytics] Error: Event not found');
       return res.status(404).json({
         success: false,
         message: 'Event not found',
       });
     }
+    console.log('[Analytics] Event found:', event.name);
 
-    // Get all attendance records for the event
-    console.log('[Analytics] Fetching attendance records with associations...');
+    // Get all attendance records for the event (simplified first)
+    console.log('[Analytics] Fetching basic attendance records...');
     const attendances = await Attendance.findAll({
       where: { eventId },
       include: [{
         model: User,
         as: 'student',
-        where: { role: 'student' },
-        attributes: ['id', 'name', 'rollNumber', 'department', 'email'],
-        required: true
-      }],
-      order: [['checkInTime', 'ASC']]
+        attributes: ['id', 'name', 'rollNumber', 'department', 'email']
+      }]
     });
     
     console.log(`[Analytics] Successfully fetched ${attendances.length} attendance records`);
@@ -320,6 +321,31 @@ exports.getDepartmentAttendanceStats = async (req, res, next) => {
       success: false,
       message: 'Failed to fetch department attendance statistics',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+};
+
+/**
+ * @desc    Simple test endpoint for comprehensive analytics
+ * @route   GET /api/admin/analytics/test-comprehensive
+ * @access  Private (Admin)
+ */
+exports.testComprehensiveAnalytics = async (req, res, next) => {
+  try {
+    console.log('[Analytics Test] Testing comprehensive analytics endpoint...');
+    
+    res.status(200).json({
+      success: true,
+      message: 'Comprehensive analytics endpoint is working!',
+      timestamp: new Date().toISOString(),
+      test: true
+    });
+  } catch (error) {
+    console.error('[Analytics Test] Error:', error.message);
+    res.status(500).json({
+      success: false,
+      message: 'Test endpoint failed',
+      error: error.message
     });
   }
 };

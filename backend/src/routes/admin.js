@@ -54,6 +54,7 @@ router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
 
 // Analytics - New Comprehensive System
+router.get('/analytics/test-comprehensive', attendanceAnalytics.testComprehensiveAnalytics);
 router.get('/analytics/attendance-comprehensive', attendanceAnalytics.getComprehensiveAttendance);
 router.get('/analytics/student-history/:studentId', attendanceAnalytics.getStudentAttendanceHistory);
 router.get('/analytics/department-attendance', attendanceAnalytics.getDepartmentAttendanceStats);
