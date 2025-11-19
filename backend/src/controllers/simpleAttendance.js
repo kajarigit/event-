@@ -16,43 +16,35 @@ exports.getEventAttendanceRecords = async (req, res, next) => {
     // First verify the event exists
     const event = await Event.findByPk(eventId);
     if (!event) {
+      console.log('[Simple Attendance] Event not found');
       return res.status(404).json({
         success: false,
         message: 'Event not found',
       });
     }
 
-    // Get attendance records with a simple query first
-    console.log('[Simple Attendance] Querying attendance table...');
+    console.log('[Simple Attendance] Event found:', event.name);
+
+    // Try simple Sequelize query first
+    console.log('[Simple Attendance] Using simple Sequelize query...');
     
-    const attendanceRecords = await sequelize.query(`
-      SELECT 
-        a.id,
-        a."eventId",
-        a."studentId", 
-        a."checkInTime",
-        a."checkOutTime",
-        a.status,
-        u.name as student_name,
-        u."rollNumber" as roll_number,
-        u.department as department,
-        u.email as email,
-        e.name as event_name
-      FROM attendances a
-      JOIN users u ON a."studentId" = u.id
-      JOIN events e ON a."eventId" = e.id
-      WHERE a."eventId" = :eventId
-        AND u.role = 'student'
-      ORDER BY a."checkInTime" DESC
-      LIMIT :limit
-    `, {
-      replacements: { eventId, limit: parseInt(limit) },
-      type: sequelize.QueryTypes.SELECT
+    const attendanceRecords = await Attendance.findAll({
+      where: { eventId: eventId },
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['id', 'name', 'rollNumber', 'department', 'email'],
+          where: { role: 'student' }
+        }
+      ],
+      order: [['checkInTime', 'DESC']],
+      limit: parseInt(limit)
     });
 
     console.log(`[Simple Attendance] Found ${attendanceRecords.length} records`);
 
-    // Process the results
+    // Process the results (Sequelize objects)
     const processedRecords = attendanceRecords.map(record => {
       const checkIn = new Date(record.checkInTime);
       const checkOut = record.checkOutTime ? new Date(record.checkOutTime) : null;
@@ -77,11 +69,11 @@ exports.getEventAttendanceRecords = async (req, res, next) => {
       return {
         id: record.id,
         student: {
-          id: record.studentId,
-          name: record.student_name,
-          rollNumber: record.roll_number,
-          department: record.department,
-          email: record.email
+          id: record.student.id,
+          name: record.student.name,
+          rollNumber: record.student.rollNumber,
+          department: record.student.department,
+          email: record.student.email
         },
         checkInTime: record.checkInTime,
         checkOutTime: record.checkOutTime,
@@ -152,12 +144,12 @@ exports.getAttendanceSummary = async (req, res, next) => {
     
     const summaryData = await sequelize.query(`
       SELECT 
-        e.id as event_id,
+        e.id::text as event_id,
         e.name as event_name,
-        COUNT(a.id) as total_records,
-        COUNT(DISTINCT a."studentId") as unique_students,
-        COUNT(CASE WHEN a."checkOutTime" IS NULL THEN 1 END) as active_sessions,
-        COUNT(CASE WHEN a."checkOutTime" IS NOT NULL THEN 1 END) as completed_sessions
+        COUNT(a.id)::integer as total_records,
+        COUNT(DISTINCT a."studentId")::integer as unique_students,
+        COUNT(CASE WHEN a."checkOutTime" IS NULL THEN 1 END)::integer as active_sessions,
+        COUNT(CASE WHEN a."checkOutTime" IS NOT NULL THEN 1 END)::integer as completed_sessions
       FROM events e
       LEFT JOIN attendances a ON e.id = a."eventId"
       LEFT JOIN users u ON a."studentId" = u.id AND u.role = 'student'
