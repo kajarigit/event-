@@ -142,7 +142,7 @@ export const adminApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  // Analytics
+  // Analytics - Legacy
   getDetailedAttendance: (params) => api.get('/admin/analytics/detailed-attendance', { params }),
   getTopStudents: (params) => api.get('/admin/analytics/top-students', { params }),
   getMostReviewers: (params) => api.get('/admin/analytics/most-reviewers', { params }),
@@ -150,6 +150,16 @@ export const adminApi = {
   getDepartmentStats: (params) => api.get('/admin/analytics/department-stats', { params }),
   getEventOverview: (params) => api.get('/admin/analytics/event-overview', { params }),
   exportComprehensiveAnalytics: (params) => api.get('/admin/analytics/export-comprehensive', { params, responseType: 'blob' }),
+
+  // Analytics - New Comprehensive System
+  getComprehensiveAttendance: (params) => api.get('/admin/analytics/attendance-comprehensive', { params }),
+  getStudentHistory: (studentId, params) => api.get(`/admin/analytics/student-history/${studentId}`, { params }),
+  getDepartmentAttendanceStats: (params) => api.get('/admin/analytics/department-attendance', { params }),
+  
+  // New Comprehensive Analytics
+  getComprehensiveAttendance: (params) => api.get('/admin/analytics/attendance-comprehensive', { params }),
+  getStudentAttendanceHistory: (studentId, params) => api.get(`/admin/analytics/student-history/${studentId}`, { params }),
+  getDepartmentAttendanceStats: (params) => api.get('/admin/analytics/department-attendance', { params }),
 
   // Reports
   exportAttendance: (params) => api.get('/admin/reports/attendance', { params, responseType: 'blob' }),

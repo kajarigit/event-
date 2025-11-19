@@ -38,20 +38,9 @@ export default function Analytics() {
   const { data: attendanceData, refetch: refetchAttendance } = useQuery({
     queryKey: ['comprehensiveAttendance', selectedEvent],
     queryFn: async () => {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/admin/analytics/attendance-comprehensive?eventId=${selectedEvent}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch attendance data: ${response.status}`);
-      }
-      
-      const data = await response.json();
+      const response = await adminApi.getComprehensiveAttendance({ eventId: selectedEvent });
       setLastUpdated(new Date());
-      return data.data;
+      return response.data?.data || response.data;
     },
     enabled: !!selectedEvent && viewMode === 'comprehensive',
     refetchInterval: liveUpdatesEnabled ? pollingInterval : false,
@@ -66,20 +55,8 @@ export default function Analytics() {
   const { data: studentHistory, refetch: refetchStudentHistory } = useQuery({
     queryKey: ['studentHistory', selectedStudent, selectedEvent],
     queryFn: async () => {
-      const url = `${process.env.REACT_APP_API_URL}/api/admin/analytics/student-history/${selectedStudent}${selectedEvent ? `?eventId=${selectedEvent}` : ''}`;
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch student history: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data.data;
+      const response = await adminApi.getStudentAttendanceHistory(selectedStudent, selectedEvent ? { eventId: selectedEvent } : {});
+      return response.data?.data || response.data;
     },
     enabled: !!selectedStudent && viewMode === 'student-detail',
     refetchInterval: liveUpdatesEnabled ? pollingInterval : false,
@@ -89,19 +66,8 @@ export default function Analytics() {
   const { data: departmentStats, refetch: refetchDepartmentStats } = useQuery({
     queryKey: ['departmentAttendance', selectedEvent],
     queryFn: async () => {
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/admin/analytics/department-attendance?eventId=${selectedEvent}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`Failed to fetch department stats: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data.data;
+      const response = await adminApi.getDepartmentAttendanceStats({ eventId: selectedEvent });
+      return response.data?.data || response.data;
     },
     enabled: !!selectedEvent && viewMode === 'comprehensive',
     refetchInterval: liveUpdatesEnabled ? pollingInterval * 2 : false,
