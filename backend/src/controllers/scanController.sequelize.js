@@ -324,6 +324,7 @@ exports.scanStudent = async (req, res, next) => {
         userId: studentId,
         eventId,
         scannedBy: req.user.id, // The volunteer/admin who performed the scan
+        scannedByType: req.user.role === 'volunteer' ? 'volunteer' : 'user', // Set the correct type
         gate: req.body.gate || 'Gate 1', // Allow gate to be specified
         scanType: action === 'in' ? 'check-in' : 'check-out',
         scanTime: new Date(),
@@ -525,6 +526,8 @@ exports.scanStall = async (req, res, next) => {
         userId: studentId,
         eventId,
         stallId,
+        scannedBy: req.user.id, // The volunteer/admin who performed the scan
+        scannedByType: req.user.role === 'volunteer' ? 'volunteer' : 'user', // Set the correct type
         scanType: action,
         scanTime: new Date(),
         status: 'success',

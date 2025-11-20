@@ -15,7 +15,11 @@ export default function Volunteers() {
     volunteerId: '',
     department: '',
     phone: '',
-    permissions: 'basic',
+    permissions: {
+      canScanQR: true,
+      canManageAttendance: true,
+      canViewReports: false
+    },
     password: 'volunteer123'
   });
   const fileInputRef = useRef(null);
@@ -121,7 +125,11 @@ export default function Volunteers() {
       volunteerId: volunteer.volunteerId,
       department: volunteer.department,
       phone: volunteer.phone || '',
-      permissions: volunteer.permissions || 'basic',
+      permissions: volunteer.permissions || {
+        canScanQR: true,
+        canManageAttendance: true,
+        canViewReports: false
+      },
       password: '' // Don't pre-fill password for security
     });
     setShowModal(true);
@@ -156,7 +164,11 @@ export default function Volunteers() {
       volunteerId: '',
       department: '',
       phone: '',
-      permissions: 'basic',
+      permissions: {
+        canScanQR: true,
+        canManageAttendance: true,
+        canViewReports: false
+      },
       password: 'volunteer123'
     });
   };
@@ -249,9 +261,9 @@ export default function Volunteers() {
                 <UsersIcon className="h-6 w-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-blue-600">Basic Permissions</p>
+                <p className="text-sm font-medium text-blue-600">Can Scan QR</p>
                 <p className="text-2xl font-semibold text-blue-900">
-                  {volunteers.filter(v => v.permissions === 'basic').length}
+                  {volunteers.filter(v => v.permissions?.canScanQR).length}
                 </p>
               </div>
             </div>
@@ -263,9 +275,9 @@ export default function Volunteers() {
                 <UsersIcon className="h-6 w-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-purple-600">Advanced Permissions</p>
+                <p className="text-sm font-medium text-purple-600">Can View Reports</p>
                 <p className="text-2xl font-semibold text-purple-900">
-                  {volunteers.filter(v => v.permissions === 'advanced').length}
+                  {volunteers.filter(v => v.permissions?.canViewReports).length}
                 </p>
               </div>
             </div>
@@ -345,11 +357,28 @@ export default function Volunteers() {
                     <div className="text-sm text-gray-900">{volunteer.phone || 'No phone'}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      volunteer.permissions === 'advanced' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
-                    }`}>
-                      {volunteer.permissions || 'basic'}
-                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {volunteer.permissions?.canScanQR && (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                          QR Scan
+                        </span>
+                      )}
+                      {volunteer.permissions?.canManageAttendance && (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                          Attendance
+                        </span>
+                      )}
+                      {volunteer.permissions?.canViewReports && (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">
+                          Reports
+                        </span>
+                      )}
+                      {!volunteer.permissions?.canScanQR && !volunteer.permissions?.canManageAttendance && !volunteer.permissions?.canViewReports && (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                          No Permissions
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex space-x-2">
@@ -470,15 +499,56 @@ export default function Volunteers() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700">Permissions</label>
-                      <select
-                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        value={formData.permissions}
-                        onChange={(e) => setFormData({ ...formData, permissions: e.target.value })}
-                      >
-                        <option value="basic">Basic</option>
-                        <option value="advanced">Advanced</option>
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-3">Permissions</label>
+                      <div className="space-y-3">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            checked={formData.permissions.canScanQR}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              permissions: { 
+                                ...formData.permissions, 
+                                canScanQR: e.target.checked 
+                              }
+                            })}
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Can Scan QR Codes</span>
+                        </label>
+                        
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            checked={formData.permissions.canManageAttendance}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              permissions: { 
+                                ...formData.permissions, 
+                                canManageAttendance: e.target.checked 
+                              }
+                            })}
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Can Manage Attendance</span>
+                        </label>
+                        
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                            checked={formData.permissions.canViewReports}
+                            onChange={(e) => setFormData({ 
+                              ...formData, 
+                              permissions: { 
+                                ...formData.permissions, 
+                                canViewReports: e.target.checked 
+                              }
+                            })}
+                          />
+                          <span className="ml-2 text-sm text-gray-700">Can View Reports</span>
+                        </label>
+                      </div>
                     </div>
 
                     {!editingVolunteer && (

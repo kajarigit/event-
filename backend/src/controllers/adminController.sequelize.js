@@ -2460,8 +2460,6 @@ exports.fixStallPasswords = async (req, res, next) => {
  */
 exports.getVolunteers = async (req, res, next) => {
   try {
-    const { Volunteer } = require('../models');
-    
     const volunteers = await Volunteer.findAll({
       where: {
         isActive: true
@@ -2492,7 +2490,6 @@ exports.getVolunteers = async (req, res, next) => {
  */
 exports.createVolunteer = async (req, res, next) => {
   try {
-    const { Volunteer } = require('../models');
     const { name, volunteerId, department, phone, email, permissions } = req.body;
 
     // Validate required fields
@@ -2557,7 +2554,6 @@ exports.createVolunteer = async (req, res, next) => {
  */
 exports.getVolunteer = async (req, res, next) => {
   try {
-    const { Volunteer } = require('../models');
     const { id } = req.params;
 
     const volunteer = await Volunteer.findOne({
@@ -2596,7 +2592,6 @@ exports.getVolunteer = async (req, res, next) => {
  */
 exports.updateVolunteer = async (req, res, next) => {
   try {
-    const { Volunteer } = require('../models');
     const { id } = req.params;
     const { name, department, phone, email, permissions } = req.body;
 
@@ -2653,7 +2648,6 @@ exports.updateVolunteer = async (req, res, next) => {
  */
 exports.deleteVolunteer = async (req, res, next) => {
   try {
-    const { Volunteer } = require('../models');
     const { id } = req.params;
 
     const volunteer = await Volunteer.findOne({
@@ -2693,7 +2687,6 @@ exports.deleteVolunteer = async (req, res, next) => {
  */
 exports.getVolunteerScanAnalytics = async (req, res, next) => {
   try {
-    const { Volunteer, User, Event, ScanLog } = require('../models');
     const { Op } = require('sequelize');
     const { eventId, volunteerId, startDate, endDate } = req.query;
 
@@ -2869,9 +2862,8 @@ exports.downloadVolunteerCredentials = async (req, res, next) => {
     const cachedCredentials = volunteerCredentialsCache.getAllVolunteerCredentials();
     
     // Also get all existing volunteers from database
-    const existingVolunteers = await User.findAll({
+    const existingVolunteers = await Volunteer.findAll({
       where: { 
-        role: 'volunteer',
         isActive: true
       },
       attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'createdAt'],

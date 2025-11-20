@@ -1,4 +1,4 @@
-const { ScanLog, User, Event, Stall, Attendance, Vote, Feedback, sequelize } = require('../models/index.sequelize');
+const { ScanLog, User, Volunteer, Event, Stall, Attendance, Vote, Feedback, sequelize } = require('../models/index.sequelize');
 const { Op } = require('sequelize');
 
 const scanLogAnalytics = {
@@ -51,12 +51,6 @@ const scanLogAnalytics = {
             required: false
           },
           {
-            model: User,
-            as: 'scanner', // Volunteer/Admin who performed the scan
-            attributes: ['id', 'name', 'role', 'department'],
-            required: false
-          },
-          {
             model: Event,
             as: 'event',
             attributes: ['id', 'name', 'startDate', 'endDate'],
@@ -72,6 +66,42 @@ const scanLogAnalytics = {
         order: [['scanTime', 'DESC']],
         limit: 1000 // Reasonable limit
       });
+
+      // Manually fetch scanner information based on scannedByType
+      for (const log of scanLogs) {
+        if (log.scannedBy) {
+          try {
+            if (log.scannedByType === 'volunteer') {
+              const volunteer = await Volunteer.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'volunteerId', 'department']
+              });
+              if (volunteer) {
+                log.dataValues.scanner = {
+                  id: volunteer.id,
+                  name: volunteer.name,
+                  role: 'volunteer',
+                  volunteerId: volunteer.volunteerId,
+                  department: volunteer.department
+                };
+              }
+            } else if (log.scannedByType === 'user') {
+              const user = await User.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'role', 'department']
+              });
+              if (user) {
+                log.dataValues.scanner = {
+                  id: user.id,
+                  name: user.name,
+                  role: user.role,
+                  department: user.department
+                };
+              }
+            }
+          } catch (scannerError) {
+            console.warn('Error fetching scanner for scan log:', log.id, scannerError.message);
+          }
+        }
+      }
 
       // Calculate analytics
       const analytics = {
@@ -225,11 +255,6 @@ const scanLogAnalytics = {
             attributes: ['id', 'name', 'regNo', 'department', 'programme', 'year', 'email'],
           },
           {
-            model: User,
-            as: 'scanner',
-            attributes: ['id', 'name', 'role', 'department'],
-          },
-          {
             model: Event,
             as: 'event',
             attributes: ['id', 'name', 'startDate', 'endDate'],
@@ -245,6 +270,42 @@ const scanLogAnalytics = {
         limit: parseInt(limit),
         offset
       });
+
+      // Manually fetch scanner information based on scannedByType
+      for (const log of scanLogs) {
+        if (log.scannedBy) {
+          try {
+            if (log.scannedByType === 'volunteer') {
+              const volunteer = await Volunteer.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'volunteerId', 'department']
+              });
+              if (volunteer) {
+                log.dataValues.scanner = {
+                  id: volunteer.id,
+                  name: volunteer.name,
+                  role: 'volunteer',
+                  volunteerId: volunteer.volunteerId,
+                  department: volunteer.department
+                };
+              }
+            } else if (log.scannedByType === 'user') {
+              const user = await User.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'role', 'department']
+              });
+              if (user) {
+                log.dataValues.scanner = {
+                  id: user.id,
+                  name: user.name,
+                  role: user.role,
+                  department: user.department
+                };
+              }
+            }
+          } catch (scannerError) {
+            console.warn('Error fetching scanner for scan log:', log.id, scannerError.message);
+          }
+        }
+      }
 
       res.json({
         success: true,
@@ -292,14 +353,9 @@ const scanLogAnalytics = {
       const volunteerStats = await ScanLog.findAll({
         where: {
           scanTime: { [Op.gte]: startTime },
-          scannedBy: { [Op.not]: null }
+          scannedBy: { [Op.not]: null },
+          scannedByType: 'volunteer' // Only get volunteer scans
         },
-        include: [{
-          model: User,
-          as: 'scanner',
-          where: { role: ['volunteer', 'admin'] },
-          attributes: ['id', 'name', 'role', 'department']
-        }],
         attributes: [
           'scannedBy',
           [sequelize.fn('COUNT', sequelize.col('ScanLog.id')), 'totalScans'],
@@ -308,24 +364,45 @@ const scanLogAnalytics = {
           [sequelize.fn('MIN', sequelize.col('scanTime')), 'firstScan'],
           [sequelize.fn('MAX', sequelize.col('scanTime')), 'lastScan']
         ],
-        group: ['scannedBy', 'scanner.id', 'scanner.name', 'scanner.role', 'scanner.department'],
-        raw: false
+        group: ['scannedBy'],
+        raw: true
+      });
+
+      // Get volunteer details separately
+      const volunteerIds = volunteerStats.map(stat => stat.scannedBy);
+      const volunteers = await Volunteer.findAll({
+        where: { id: volunteerIds },
+        attributes: ['id', 'name', 'volunteerId', 'department']
+      });
+
+      const volunteerLookup = {};
+      volunteers.forEach(volunteer => {
+        volunteerLookup[volunteer.id] = volunteer;
       });
 
       // Calculate additional metrics
       const performanceData = volunteerStats.map(stat => {
-        const totalScans = parseInt(stat.dataValues.totalScans);
-        const successfulScans = parseInt(stat.dataValues.successfulScans);
-        const failedScans = parseInt(stat.dataValues.failedScans);
+        const volunteer = volunteerLookup[stat.scannedBy];
+        if (!volunteer) return null;
+
+        const totalScans = parseInt(stat.totalScans);
+        const successfulScans = parseInt(stat.successfulScans);
+        const failedScans = parseInt(stat.failedScans);
         const successRate = totalScans > 0 ? (successfulScans / totalScans * 100) : 0;
         
-        const firstScan = new Date(stat.dataValues.firstScan);
-        const lastScan = new Date(stat.dataValues.lastScan);
+        const firstScan = new Date(stat.firstScan);
+        const lastScan = new Date(stat.lastScan);
         const workingTime = (lastScan - firstScan) / (1000 * 60 * 60); // hours
         const scansPerHour = workingTime > 0 ? (totalScans / workingTime) : 0;
 
         return {
-          volunteer: stat.scanner,
+          volunteer: {
+            id: volunteer.id,
+            name: volunteer.name,
+            role: 'volunteer',
+            volunteerId: volunteer.volunteerId,
+            department: volunteer.department
+          },
           metrics: {
             totalScans,
             successfulScans,
@@ -333,11 +410,11 @@ const scanLogAnalytics = {
             successRate: Math.round(successRate * 100) / 100,
             workingHours: Math.round(workingTime * 100) / 100,
             scansPerHour: Math.round(scansPerHour * 100) / 100,
-            firstScan: stat.dataValues.firstScan,
-            lastScan: stat.dataValues.lastScan
+            firstScan: stat.firstScan,
+            lastScan: stat.lastScan
           }
         };
-      });
+      }).filter(item => item !== null);
 
       // Sort by total scans
       performanceData.sort((a, b) => b.metrics.totalScans - a.metrics.totalScans);
@@ -388,11 +465,6 @@ const scanLogAnalytics = {
             attributes: ['id', 'name', 'regNo', 'department']
           },
           {
-            model: User,
-            as: 'scanner',
-            attributes: ['id', 'name', 'role']
-          },
-          {
             model: Event,
             as: 'event',
             attributes: ['id', 'name']
@@ -401,6 +473,39 @@ const scanLogAnalytics = {
         order: [['scanTime', 'DESC']],
         limit: 20
       });
+
+      // Manually fetch scanner information based on scannedByType
+      for (const log of recentScans) {
+        if (log.scannedBy) {
+          try {
+            if (log.scannedByType === 'volunteer') {
+              const volunteer = await Volunteer.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'volunteerId']
+              });
+              if (volunteer) {
+                log.dataValues.scanner = {
+                  id: volunteer.id,
+                  name: volunteer.name,
+                  role: 'volunteer'
+                };
+              }
+            } else if (log.scannedByType === 'user') {
+              const user = await User.findByPk(log.scannedBy, {
+                attributes: ['id', 'name', 'role']
+              });
+              if (user) {
+                log.dataValues.scanner = {
+                  id: user.id,
+                  name: user.name,
+                  role: user.role
+                };
+              }
+            }
+          } catch (scannerError) {
+            console.warn('Error fetching scanner for real-time scan:', log.id, scannerError.message);
+          }
+        }
+      }
 
       res.json({
         success: true,
@@ -444,11 +549,6 @@ const scanLogAnalytics = {
             attributes: ['name', 'regNo', 'department', 'programme']
           },
           {
-            model: User,
-            as: 'scanner',
-            attributes: ['name', 'role']
-          },
-          {
             model: Event,
             as: 'event',
             attributes: ['name']
@@ -462,6 +562,37 @@ const scanLogAnalytics = {
         ],
         order: [['scanTime', 'DESC']]
       });
+
+      // Manually fetch scanner information based on scannedByType
+      for (const log of scanLogs) {
+        if (log.scannedBy) {
+          try {
+            if (log.scannedByType === 'volunteer') {
+              const volunteer = await Volunteer.findByPk(log.scannedBy, {
+                attributes: ['name', 'volunteerId']
+              });
+              if (volunteer) {
+                log.dataValues.scanner = {
+                  name: volunteer.name,
+                  role: 'volunteer'
+                };
+              }
+            } else if (log.scannedByType === 'user') {
+              const user = await User.findByPk(log.scannedBy, {
+                attributes: ['name', 'role']
+              });
+              if (user) {
+                log.dataValues.scanner = {
+                  name: user.name,
+                  role: user.role
+                };
+              }
+            }
+          } catch (scannerError) {
+            console.warn('Error fetching scanner for export:', log.id, scannerError.message);
+          }
+        }
+      }
 
       // Convert to CSV format
       const csvHeaders = [

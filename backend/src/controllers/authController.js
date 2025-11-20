@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Volunteer = require('../models/Volunteer');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 
 /**
@@ -67,11 +68,52 @@ exports.register = async (req, res, next) => {
  */
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, regNo, volunteerId } = req.body;
 
-    // Check if user exists
-    const user = await User.findOne({ email }).select('+password');
+    let user = null;
+    let userType = null;
+    
+    console.log('🔐 Login attempt with:', {
+      email: email || 'not provided',
+      regNo: regNo || 'not provided', 
+      volunteerId: volunteerId || 'not provided'
+    });
+
+    // Try to find user in Users table first
+    if (email) {
+      user = await User.findOne({ email }).select('+password');
+      if (user) {
+        userType = 'user';
+        console.log('👤 Found in Users table by email:', user.email);
+      }
+    } else if (regNo) {
+      user = await User.findOne({ regNo }).select('+password');
+      if (user) {
+        userType = 'user';
+        console.log('👤 Found in Users table by regNo:', user.regNo);
+      }
+    }
+
+    // If not found in Users table, try Volunteers table
     if (!user) {
+      if (email) {
+        user = await Volunteer.findOne({ email }).select('+password');
+        if (user) {
+          userType = 'volunteer';
+          console.log('👤 Found in Volunteers table by email:', user.email);
+        }
+      } else if (volunteerId) {
+        user = await Volunteer.findOne({ volunteerId }).select('+password');
+        if (user) {
+          userType = 'volunteer';
+          console.log('👤 Found in Volunteers table by volunteerId:', user.volunteerId);
+        }
+      }
+    }
+
+    // If still no user found
+    if (!user) {
+      console.log('❌ User not found in either table');
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
@@ -80,14 +122,29 @@ exports.login = async (req, res, next) => {
 
     // Check if user is active
     if (!user.isActive) {
+      console.log('❌ User account is inactive');
       return res.status(401).json({
         success: false,
         message: 'Your account has been deactivated',
       });
     }
 
+    console.log('🔐 Attempting password verification for user:', user.id);
+    console.log('👤 User instance:', {
+      id: user.id,
+      name: user.name,
+      [userType === 'volunteer' ? 'volunteerId' : 'regNo']: userType === 'volunteer' ? user.volunteerId : user.regNo,
+      hasPassword: !!user.password,
+      hasDataValues: !!user.dataValues,
+      dataValuesPassword: !!(user.dataValues && user.dataValues.password),
+      passwordLength: user.password ? user.password.length : 0
+    });
+
     // Verify password
+    console.log('🔍 Entered password:', password?.substring(0, 3) + '***');
     const isMatch = await user.comparePassword(password);
+    console.log('🔑 Password match result:', isMatch);
+    
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -99,9 +156,14 @@ exports.login = async (req, res, next) => {
     user.lastLogin = new Date();
     await user.save({ validateBeforeSave: false });
 
+    // Determine role for token generation
+    const role = userType === 'volunteer' ? 'volunteer' : user.role;
+
     // Generate tokens
-    const accessToken = generateAccessToken(user._id, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    const accessToken = generateAccessToken(user.id, role);
+    const refreshToken = generateRefreshToken(user.id);
+
+    console.log('✅ Login successful for:', userType === 'volunteer' ? user.volunteerId : user.email);
 
     res.status(200).json({
       success: true,
@@ -113,6 +175,7 @@ exports.login = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('🔥 Login error:', error);
     next(error);
   }
 };
@@ -136,8 +199,16 @@ exports.refreshToken = async (req, res, next) => {
     // Verify refresh token
     const decoded = verifyToken(refreshToken, true);
 
-    // Get user
-    const user = await User.findById(decoded.userId);
+    // Get user from appropriate table
+    let user = await User.findById(decoded.userId);
+    let userRole = user?.role || 'user';
+    
+    // If not found in Users, try Volunteers
+    if (!user) {
+      user = await Volunteer.findById(decoded.userId);
+      userRole = 'volunteer';
+    }
+    
     if (!user || !user.isActive) {
       return res.status(401).json({
         success: false,
@@ -146,7 +217,7 @@ exports.refreshToken = async (req, res, next) => {
     }
 
     // Generate new access token
-    const newAccessToken = generateAccessToken(user._id, user.role);
+    const newAccessToken = generateAccessToken(user.id, userRole);
 
     res.status(200).json({
       success: true,
@@ -185,12 +256,26 @@ exports.logout = async (req, res, next) => {
  */
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    let user = null;
+    
+    // Check if it's a volunteer first (based on role in token)
+    if (req.user.role === 'volunteer') {
+      user = await Volunteer.findById(req.user.id);
+    } else {
+      user = await User.findById(req.user.id);
+    }
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
     
     console.log('GetMe - User Details:', {
-      id: user._id,
+      id: user.id,
       email: user.email,
-      role: user.role,
+      role: req.user.role,
       name: user.name,
       isActive: user.isActive
     });
@@ -220,11 +305,22 @@ exports.updateProfile = async (req, res, next) => {
       }
     });
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      updates,
-      { new: true, runValidators: true }
-    );
+    let user = null;
+    
+    // Update appropriate table based on user role
+    if (req.user.role === 'volunteer') {
+      user = await Volunteer.findByIdAndUpdate(
+        req.user.id,
+        updates,
+        { new: true, runValidators: true }
+      );
+    } else {
+      user = await User.findByIdAndUpdate(
+        req.user.id,
+        updates,
+        { new: true, runValidators: true }
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -259,8 +355,13 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    // Get user with password
-    const user = await User.findById(req.user._id).select('+password');
+    // Get user with password from appropriate table
+    let user = null;
+    if (req.user.role === 'volunteer') {
+      user = await Volunteer.findById(req.user.id).select('+password');
+    } else {
+      user = await User.findById(req.user.id).select('+password');
+    }
 
     // Verify current password
     const isMatch = await user.comparePassword(currentPassword);

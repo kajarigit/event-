@@ -24,9 +24,9 @@ const registerValidation = [
 
 const loginValidation = [
   body().custom((value, { req }) => {
-    // Either email or regNo is required
-    if (!req.body.email && !req.body.regNo) {
-      throw new Error('Either email or registration number is required');
+    // Either email, regNo, or volunteerId is required
+    if (!req.body.email && !req.body.regNo && !req.body.volunteerId) {
+      throw new Error('Either email, registration number, or volunteer ID is required');
     }
     // If email is provided, validate it
     if (req.body.email && !validator.isEmail(req.body.email)) {
