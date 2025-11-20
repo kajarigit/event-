@@ -215,7 +215,7 @@ const AdminScanLogManagement = () => {
         </div>
 
         {/* Analytics Overview */}
-        {analytics?.data && (
+        {analytics?.data?.data && (
           <>
             {/* Key Metrics */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -224,7 +224,7 @@ const AdminScanLogManagement = () => {
                   <Target className="w-5 h-5 text-blue-600" />
                   <span className="text-xs font-medium text-blue-600">TOTAL</span>
                 </div>
-                <p className="text-2xl font-bold text-blue-900">{analytics.data.totalScans}</p>
+                <p className="text-2xl font-bold text-blue-900">{analytics.data.data.totalScans}</p>
                 <p className="text-xs text-blue-600">Total Scans</p>
               </div>
 
@@ -233,7 +233,7 @@ const AdminScanLogManagement = () => {
                   <CheckCircle className="w-5 h-5 text-green-600" />
                   <span className="text-xs font-medium text-green-600">SUCCESS</span>
                 </div>
-                <p className="text-2xl font-bold text-green-900">{analytics.data.scansByStatus?.success || 0}</p>
+                <p className="text-2xl font-bold text-green-900">{analytics.data.data.scansByStatus?.success || 0}</p>
                 <p className="text-xs text-green-600">Successful</p>
               </div>
 
@@ -242,7 +242,7 @@ const AdminScanLogManagement = () => {
                   <XCircle className="w-5 h-5 text-red-600" />
                   <span className="text-xs font-medium text-red-600">FAILED</span>
                 </div>
-                <p className="text-2xl font-bold text-red-900">{analytics.data.scansByStatus?.failed || 0}</p>
+                <p className="text-2xl font-bold text-red-900">{analytics.data.data.scansByStatus?.failed || 0}</p>
                 <p className="text-xs text-red-600">Failed</p>
               </div>
 
@@ -251,7 +251,7 @@ const AdminScanLogManagement = () => {
                   <UserCheck className="w-5 h-5 text-purple-600" />
                   <span className="text-xs font-medium text-purple-600">CHECK-IN</span>
                 </div>
-                <p className="text-2xl font-bold text-purple-900">{analytics.data.scansByType?.['check-in'] || 0}</p>
+                <p className="text-2xl font-bold text-purple-900">{analytics.data.data.scansByType?.['check-in'] || 0}</p>
                 <p className="text-xs text-purple-600">Check-ins</p>
               </div>
 
@@ -260,7 +260,7 @@ const AdminScanLogManagement = () => {
                   <Timer className="w-5 h-5 text-orange-600" />
                   <span className="text-xs font-medium text-orange-600">CHECK-OUT</span>
                 </div>
-                <p className="text-2xl font-bold text-orange-900">{analytics.data.scansByType?.['check-out'] || 0}</p>
+                <p className="text-2xl font-bold text-orange-900">{analytics.data.data.scansByType?.['check-out'] || 0}</p>
                 <p className="text-xs text-orange-600">Check-outs</p>
               </div>
 
@@ -269,7 +269,7 @@ const AdminScanLogManagement = () => {
                   <Users className="w-5 h-5 text-indigo-600" />
                   <span className="text-xs font-medium text-indigo-600">VOLUNTEERS</span>
                 </div>
-                <p className="text-2xl font-bold text-indigo-900">{analytics.data.topVolunteers?.length || 0}</p>
+                <p className="text-2xl font-bold text-indigo-900">{Object.keys(analytics.data.data.scansByVolunteer || {}).length}</p>
                 <p className="text-xs text-indigo-600">Active</p>
               </div>
             </div>

@@ -131,11 +131,12 @@ const scanLogAnalytics = {
         // Count by hour
         analytics.scansByHour[hour] = (analytics.scansByHour[hour] || 0) + 1;
 
-        // Count by volunteer (only for admins)
-        if (userRole === 'admin' && log.scanner) {
-          const volunteerName = log.scanner.name;
+        // Count by volunteer (ensure this works for all users)
+        const scanner = log.scanner || log.dataValues?.scanner;
+        if (scanner) {
+          const volunteerName = scanner.name;
           if (!analytics.scansByVolunteer[volunteerName]) {
-            analytics.scansByVolunteer[volunteerName] = { count: 0, volunteer: log.scanner };
+            analytics.scansByVolunteer[volunteerName] = { count: 0, volunteer: scanner };
           }
           analytics.scansByVolunteer[volunteerName].count++;
         }
@@ -169,23 +170,17 @@ const scanLogAnalytics = {
       }
       analytics.hourlyTrends = last24Hours;
 
-      // Get current status
+      // Get current status - users who checked in but haven't checked out
       const currentlyCheckedIn = await ScanLog.count({
         where: {
           scanType: 'check-in',
           scanTime: { [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-        },
-        include: [{
-          model: ScanLog,
-          as: 'checkouts',
-          where: {
-            userId: sequelize.col('ScanLog.userId'),
-            scanType: 'check-out',
-            scanTime: { [Op.gt]: sequelize.col('ScanLog.scanTime') }
-          },
-          required: false
-        }],
-        having: sequelize.literal('checkouts.id IS NULL')
+        }
+      }) - await ScanLog.count({
+        where: {
+          scanType: 'check-out',
+          scanTime: { [Op.gte]: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+        }
       });
 
       analytics.currentlyCheckedIn = currentlyCheckedIn;

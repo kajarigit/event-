@@ -2721,7 +2721,7 @@ exports.getVolunteerScanAnalytics = async (req, res, next) => {
         },
         {
           model: User,
-          as: 'student',
+          as: 'user',
           attributes: ['id', 'name', 'regNo']
         }
       ],
@@ -2765,8 +2765,8 @@ exports.getVolunteerScanAnalytics = async (req, res, next) => {
         isOnline,
         scans: scans.slice(0, 10).map(scan => ({
           id: scan.id,
-          studentName: scan.student?.name,
-          studentRegNo: scan.student?.regNo,
+          studentName: scan.user?.name,
+          studentRegNo: scan.user?.regNo,
           eventName: scan.event?.name,
           timestamp: scan.createdAt
         }))
@@ -2794,7 +2794,7 @@ exports.getVolunteerScanAnalytics = async (req, res, next) => {
       include: [
         {
           model: User,
-          as: 'student',
+          as: 'user',
           attributes: ['name', 'regNo']
         },
         {
@@ -2823,8 +2823,8 @@ exports.getVolunteerScanAnalytics = async (req, res, next) => {
     const formattedRecentActivity = recentActivity.map(scan => ({
       volunteerName: volunteerMap[scan.scannedBy]?.name || 'Unknown Volunteer',
       volunteerId: volunteerMap[scan.scannedBy]?.volunteerId || 'Unknown',
-      studentName: scan.student?.name,
-      studentRegNo: scan.student?.regNo,
+      studentName: scan.user?.name,
+      studentRegNo: scan.user?.regNo,
       eventName: scan.event?.name,
       timestamp: scan.createdAt,
       type: 'student'
@@ -2858,15 +2858,17 @@ exports.getVolunteerScanAnalytics = async (req, res, next) => {
  */
 exports.downloadVolunteerCredentials = async (req, res, next) => {
   try {
+    const bcrypt = require('bcryptjs');
+    
     // Get cached volunteer credentials (recently created ones with passwords)
     const cachedCredentials = volunteerCredentialsCache.getAllVolunteerCredentials();
     
-    // Also get all existing volunteers from database
+    // Also get all existing volunteers from database with their hashed passwords
     const existingVolunteers = await Volunteer.findAll({
       where: { 
         isActive: true
       },
-      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'createdAt'],
+      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'password', 'createdAt'],
       order: [['createdAt', 'DESC']]
     });
 
@@ -2886,21 +2888,38 @@ exports.downloadVolunteerCredentials = async (req, res, next) => {
       });
     });
     
-    // Add existing volunteers (passwords not available)
-    existingVolunteers.forEach(volunteer => {
+    // Add existing volunteers and test their passwords
+    for (const volunteer of existingVolunteers) {
       // Only add if not already in cached list
       if (!cachedCredentials.find(c => c.volunteerId === volunteer.volunteerId)) {
+        let workingPassword = 'Unknown password';
+        
+        // Test common volunteer passwords
+        const testPasswords = ['volunteer123', 'Volunteer@123'];
+        
+        for (const testPass of testPasswords) {
+          try {
+            const isMatch = await bcrypt.compare(testPass, volunteer.password);
+            if (isMatch) {
+              workingPassword = testPass;
+              break;
+            }
+          } catch (error) {
+            // Continue to next password
+          }
+        }
+        
         volunteerList.push({
           name: volunteer.name,
           volunteerId: volunteer.volunteerId,
-          password: 'Password not available (use reset)',
+          password: workingPassword,
           department: volunteer.department || 'N/A',
           phone: volunteer.phone || 'N/A',
           uid: 'N/A',
-          source: 'Existing Volunteer'
+          source: workingPassword === 'Unknown password' ? 'Existing Volunteer (password unknown)' : 'Existing Volunteer (password verified)'
         });
       }
-    });
+    }
 
     if (volunteerList.length === 0) {
       return res.status(404).json({
@@ -2945,9 +2964,8 @@ exports.downloadVolunteerCredentials = async (req, res, next) => {
  */
 exports.getVolunteerCredentials = async (req, res, next) => {
   try {
-    const volunteers = await User.findAll({
+    const volunteers = await Volunteer.findAll({
       where: { 
-        role: 'volunteer',
         isActive: true
       },
       attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'email', 'createdAt'],

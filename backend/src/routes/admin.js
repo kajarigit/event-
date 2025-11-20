@@ -63,13 +63,13 @@ router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUser
 // Volunteers 
 router.get('/volunteers', adminController.getVolunteers);
 router.post('/volunteers', adminController.createVolunteer);
-router.get('/volunteers/:id', adminController.getVolunteer);
-router.put('/volunteers/:id', adminController.updateVolunteer);
-router.delete('/volunteers/:id', adminController.deleteVolunteer);
-router.post('/volunteers/bulk', upload.single('file'), adminController.bulkUploadVolunteers);
 router.get('/volunteers/credentials', adminController.getVolunteerCredentials);
 router.get('/volunteers/download-credentials', adminController.downloadVolunteerCredentials);
 router.get('/volunteers/scan-analytics', adminController.getVolunteerScanAnalytics);
+router.post('/volunteers/bulk', upload.single('file'), adminController.bulkUploadVolunteers);
+router.get('/volunteers/:id', adminController.getVolunteer);
+router.put('/volunteers/:id', adminController.updateVolunteer);
+router.delete('/volunteers/:id', adminController.deleteVolunteer);
 
 const basicAttendance = require('../controllers/basicAttendance');
 
