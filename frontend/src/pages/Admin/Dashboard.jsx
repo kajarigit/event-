@@ -31,6 +31,7 @@ import TopFeedbackGivers from './TopFeedbackGivers';
 import TopStallsByDepartment from './TopStallsByDepartment';
 import DepartmentAttendanceRankings from './DepartmentAttendanceRankings';
 import ScanLogManagement from './ScanLogManagement';
+import DetailedFeedbackRankings from './DetailedFeedbackRankings';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -46,6 +47,7 @@ export default function AdminDashboard() {
     { name: 'Analytics', path: 'analytics', icon: BarChart3 },
     { name: 'Attendance Records', path: 'simple-attendance', icon: Users },
     { name: 'Top Feedback Givers', path: 'top-feedback', icon: MessageSquare },
+    { name: 'Detailed Feedback Rankings', path: 'detailed-feedback', icon: BarChart3 },
     { name: 'Top Stalls Rankings', path: 'top-stalls-department', icon: Vote },
     { name: 'Department Attendance', path: 'department-attendance', icon: TrendingUp },
     { name: 'Scan Log Management', path: 'scan-logs', icon: Activity },
@@ -163,6 +165,7 @@ export default function AdminDashboard() {
             <Route path="analytics" element={<Analytics />} />
             <Route path="simple-attendance" element={<SimpleAttendance />} />
             <Route path="top-feedback" element={<TopFeedbackGivers />} />
+            <Route path="detailed-feedback" element={<DetailedFeedbackRankings />} />
             <Route path="top-stalls-department" element={<TopStallsByDepartment />} />
             <Route path="department-attendance" element={<DepartmentAttendanceRankings />} />
             <Route path="scan-logs" element={<ScanLogManagement />} />

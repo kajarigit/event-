@@ -42,9 +42,26 @@ router.post(
     body('stallId').notEmpty().withMessage('Stall ID is required'),
     body('eventId').notEmpty().withMessage('Event ID is required'),
     body('rating')
+      .optional()
       .isInt({ min: 1, max: 5 })
       .withMessage('Rating must be between 1 and 5'),
-    body('comment').optional().trim().isLength({ max: 1000 }),
+    // New 5-category rating validations
+    body('qualityRating')
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Quality rating must be between 1 and 5'),
+    body('serviceRating')
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Service rating must be between 1 and 5'),
+    body('innovationRating')
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Innovation rating must be between 1 and 5'),
+    body('presentationRating')
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Presentation rating must be between 1 and 5'),
+    body('valueRating')
+      .isInt({ min: 1, max: 5 })
+      .withMessage('Value rating must be between 1 and 5'),
+    body('comments').optional().trim().isLength({ max: 1000 }),
   ],
   validate,
   studentController.submitFeedback

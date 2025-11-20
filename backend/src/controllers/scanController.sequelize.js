@@ -577,7 +577,7 @@ exports.getScanLogs = async (req, res, next) => {
         {
           model: User,
           as: 'user',
-          attributes: ['id', 'name', 'email', 'role', 'rollNumber', 'department'],
+          attributes: ['id', 'name', 'email', 'role', 'regNo', 'department'],
         },
         {
           model: Event,
@@ -603,7 +603,7 @@ exports.getScanLogs = async (req, res, next) => {
       if (logData.user) {
         logData.studentId = {
           name: logData.user.name,
-          rollNo: logData.user.rollNumber,
+          rollNo: logData.user.regNo,
           department: logData.user.department,
         };
       }
@@ -710,44 +710,61 @@ exports.getMyRecentScans = async (req, res, next) => {
     const volunteerId = req.user.id;
     const limit = parseInt(req.query.limit) || 20;
 
+    console.log('🔍 [VOLUNTEER SCANS] Getting recent scans for volunteer:', volunteerId);
+
     // Get recent scans performed by this volunteer
     const logs = await ScanLog.findAll({
       where: { 
         scannedBy: volunteerId,
+        scannedByType: 'volunteer', // Ensure we're looking for volunteer scans
         scanType: { [Op.in]: ['check-in', 'check-out'] } // Only gate scans
       },
       include: [
         {
           model: User,
-          as: 'user',
-          attributes: ['id', 'name', 'email', 'rollNumber', 'department'],
+          as: 'user', // This gets the student who was scanned (via userId)
+          attributes: ['id', 'name', 'email', 'regNo', 'department', 'year'],
+          required: false // Allow null if student data is missing
         },
         {
           model: Event,
           as: 'event',
           attributes: ['id', 'name'],
+          required: false // Allow null if event data is missing
         },
       ],
       order: [['scanTime', 'DESC']],
       limit,
     });
 
+    console.log(`📊 [VOLUNTEER SCANS] Found ${logs.length} scans for volunteer ${volunteerId}`);
+
     // Format response for frontend
-    const formattedLogs = logs.map(log => ({
-      id: log.id,
-      scanType: log.scanType,
-      scanTime: log.scanTime,
-      status: log.status,
-      gate: log.gate || 'Gate 1',
-      student: {
-        name: log.user?.name || 'Unknown',
-        rollNumber: log.user?.rollNumber || 'N/A',
-        department: log.user?.department || 'N/A',
-      },
-      event: {
-        name: log.event?.name || 'N/A',
-      },
-    }));
+    const formattedLogs = logs.map(log => {
+      console.log('📝 [SCAN LOG]', {
+        id: log.id,
+        scanType: log.scanType,
+        studentName: log.user?.name,
+        studentRegNo: log.user?.regNo,
+        gate: log.gate
+      });
+
+      return {
+        id: log.id,
+        scanType: log.scanType,
+        scanTime: log.scanTime,
+        status: log.status,
+        gate: log.gate || 'Gate 1',
+        student: {
+          name: log.user?.name || 'Unknown Student',
+          rollNumber: log.user?.regNo || log.user?.rollNumber || 'N/A',
+          department: log.user?.department || 'N/A',
+        },
+        event: {
+          name: log.event?.name || 'N/A',
+        },
+      };
+    });
 
     res.status(200).json({
       success: true,
@@ -755,6 +772,7 @@ exports.getMyRecentScans = async (req, res, next) => {
       data: formattedLogs,
     });
   } catch (error) {
+    console.error('❌ [VOLUNTEER SCANS] Error:', error);
     next(error);
   }
 };

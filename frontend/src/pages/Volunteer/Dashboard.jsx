@@ -8,7 +8,7 @@ import { scanApi } from '../../services/api';
 import { useState } from 'react';
 
 // Home component for the main volunteer dashboard
-function VolunteerHome({ recentScans, refetch }) {
+function VolunteerHome({ recentScans, refetch, isLoading, error }) {
   const formatTime = (timestamp) => {
     return new Date(timestamp).toLocaleString('en-US', {
       month: 'short',
@@ -32,13 +32,42 @@ function VolunteerHome({ recentScans, refetch }) {
           <h3 className="text-lg sm:text-xl lg:text-2xl font-bold text-gray-900">Recent Scans</h3>
         </div>
         
-        {recentScans.length === 0 ? (
+        {/* Loading State */}
+        {isLoading && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-500 text-sm sm:text-base">Loading recent scans...</p>
+          </div>
+        )}
+
+        {/* Error State */}
+        {error && (
+          <div className="text-center py-8 sm:py-12">
+            <div className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 bg-red-100 rounded-full flex items-center justify-center">
+              <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-red-600" />
+            </div>
+            <p className="text-red-600 text-sm sm:text-base font-medium">Failed to load recent scans</p>
+            <p className="text-gray-500 text-xs sm:text-sm mt-1">{error.message}</p>
+            <button 
+              onClick={refetch}
+              className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* No Data State */}
+        {!isLoading && !error && recentScans.length === 0 && (
           <div className="text-center py-8 sm:py-12">
             <Scan className="w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 text-gray-300" />
             <p className="text-gray-500 text-sm sm:text-base">No recent scans</p>
             <p className="text-gray-400 text-xs sm:text-sm mt-1">Start scanning student QR codes!</p>
           </div>
-        ) : (
+        )}
+
+        {/* Scans List */}
+        {!isLoading && !error && recentScans.length > 0 && (
           <div className="space-y-2 sm:space-y-3">
             {recentScans.map((scan) => (
               <div
@@ -89,14 +118,20 @@ export default function VolunteerDashboard() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Fetch recent scans
-  const { data: recentScansData, refetch } = useQuery({
+  const { data: recentScansData, refetch, isLoading, error } = useQuery({
     queryKey: ['recentScans'],
     queryFn: async () => {
+      console.log('🔍 Fetching recent scans for volunteer...');
       const response = await scanApi.getMyRecentScans();
+      console.log('✅ Recent scans response:', response.data);
       return response.data?.data || [];
     },
     refetchInterval: 10000, // Refresh every 10 seconds
     refetchOnWindowFocus: true,
+    retry: 3,
+    onError: (error) => {
+      console.error('❌ Failed to fetch recent scans:', error);
+    },
   });
 
   const recentScans = recentScansData || [];
@@ -201,7 +236,7 @@ export default function VolunteerDashboard() {
       <main className="flex-1 pt-16 lg:pt-0">
         <div className="p-4 lg:p-8 max-w-7xl mx-auto">
           <Routes>
-            <Route index element={<VolunteerHome recentScans={recentScans} refetch={refetch} />} />
+            <Route index element={<VolunteerHome recentScans={recentScans} refetch={refetch} isLoading={isLoading} error={error} />} />
             <Route path="analytics" element={<ScanManagement />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>

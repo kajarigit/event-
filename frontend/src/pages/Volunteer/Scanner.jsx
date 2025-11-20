@@ -13,17 +13,6 @@ export default function Scanner({ onScanSuccess }) {
   const [lastTokenSent, setLastTokenSent] = useState(null); // NEW: Track last token sent
   const queryClient = useQueryClient();
 
-  // Fetch recent scans
-  const { data: recentScans = [] } = useQuery({
-    queryKey: ['recentScans'],
-    queryFn: async () => {
-      const response = await volunteerApi.getRecentScans();
-      // Handle nested data structure: response.data.data or response.data
-      return response.data?.data || response.data || [];
-    },
-    refetchInterval: 5000, // Auto-refresh every 5 seconds
-  });
-
   // Scan mutation
   const scanMutation = useMutation({
     mutationFn: (scannedData) => {
@@ -257,7 +246,6 @@ export default function Scanner({ onScanSuccess }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
       {/* QR Scanner - Mobile Responsive */}
       <div className="card">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-4">
@@ -397,87 +385,9 @@ export default function Scanner({ onScanSuccess }) {
             <li>• Point camera at student's QR code</li>
             <li>• First scan checks IN the student</li>
             <li>• Second scan checks OUT the student</li>
-            <li>• Status will show below in recent scans</li>
+            <li>• Scan results will appear in the Recent Scans section above</li>
           </ul>
         </div>
-      </div>
-
-      {/* Recent Scans - Mobile Responsive */}
-      <div className="card">
-        <h2 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0">
-          <span>Recent Scans</span>
-          <span className="text-xs sm:text-sm text-gray-600">Auto-refreshes every 5s</span>
-        </h2>
-        <div className="space-y-3 max-h-[600px] overflow-y-auto">
-          {recentScans.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <AlertCircle className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-              <p>No scans yet</p>
-              <p className="text-sm">Start scanning student QR codes</p>
-            </div>
-          ) : (
-            recentScans.map((scan) => {
-              // Handle both MongoDB and Sequelize response formats
-              const studentName = scan.studentId?.name || scan.user?.name || 'Unknown';
-              const rollNo = scan.studentId?.rollNo || scan.user?.rollNumber || 'N/A';
-              const scanAction = scan.action || (scan.scanType === 'check-in' ? 'in' : scan.scanType === 'check-out' ? 'out' : 'unknown');
-              const hasError = scan.hasError || scan.status === 'failed';
-              const errorMsg = scan.errorMessage || 'Scan failed';
-              
-              return (
-                <div
-                  key={scan.id}
-                  className={`flex items-center justify-between p-3 rounded-lg ${
-                    hasError
-                      ? 'bg-red-50 border border-red-200'
-                      : 'bg-gray-50 border border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <User className="w-8 h-8 text-gray-400" />
-                    <div>
-                      <p className="font-medium">{studentName}</p>
-                      <p className="text-sm text-gray-600">
-                        Roll: {rollNo}
-                      </p>
-                      <p className="text-xs text-gray-500 flex items-center mt-1">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {new Date(scan.scanTime || scan.createdAt).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end space-y-1">
-                    {hasError ? (
-                      <>
-                        <div className="flex items-center space-x-2">
-                          <XCircle className="w-5 h-5 text-red-600" />
-                          <span className="text-sm font-medium text-red-600">ERROR</span>
-                        </div>
-                        <p className="text-xs text-red-600">{errorMsg}</p>
-                      </>
-                    ) : (
-                      <div className="flex items-center space-x-2">
-                        <CheckCircle
-                          className={`w-5 h-5 ${
-                            scanAction === 'in' ? 'text-green-600' : 'text-blue-600'
-                          }`}
-                        />
-                        <span
-                          className={`text-sm font-medium ${
-                            scanAction === 'in' ? 'text-green-600' : 'text-blue-600'
-                          }`}
-                        >
-                          {scanAction.toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
       </div>
     </div>
   );

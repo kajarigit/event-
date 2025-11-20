@@ -1,4 +1,4 @@
-const { User, Volunteer } = require('../models/index.sequelize');
+const { User, Volunteer, Stall } = require('../models/index.sequelize');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 
 /**
@@ -262,21 +262,122 @@ exports.logout = async (req, res, next) => {
  */
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findByPk(req.user.id);
+    console.log('🔍 GetMe called for user:', req.user);
+    let user = null;
     
-    console.log('GetMe - User Details:', {
+    // Check user type based on role in token and look up in appropriate table
+    if (req.user.role === 'volunteer') {
+      console.log('🤝 Looking up volunteer with ID:', req.user.id);
+      user = await Volunteer.findByPk(req.user.id);
+      console.log('🤝 Volunteer from DB:', user ? {
+        id: user.id,
+        volunteerId: user.volunteerId,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive
+      } : 'null');
+    } else if (req.user.role === 'stall_owner') {
+      console.log('🏪 Looking up stall owner with ID:', req.user.id);
+      user = await Stall.findByPk(req.user.id, {
+        include: [
+          {
+            model: require('../models/index.sequelize').Event,
+            as: 'event',
+            attributes: ['id', 'name', 'startDate', 'endDate', 'isActive']
+          }
+        ]
+      });
+      console.log('🏪 Stall from DB:', user ? {
+        id: user.id,
+        name: user.name,
+        ownerName: user.ownerName,
+        ownerEmail: user.ownerEmail,
+        isActive: user.isActive
+      } : 'null');
+    } else {
+      console.log('👤 Looking up regular user with ID:', req.user.id);
+      user = await User.findByPk(req.user.id);
+      console.log('👤 User from DB:', user ? {
+        id: user.id,
+        regNo: user.regNo,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive
+      } : 'null');
+    }
+    
+    if (!user) {
+      console.log('❌ User not found in database');
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+    
+    console.log('✅ GetMe - User Details:', {
       id: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name,
+      email: user.email || user.ownerEmail,
+      role: req.user.role,
+      name: user.name || user.ownerName,
       isActive: user.isActive
     });
 
+    // Handle different user types for public profile
+    let publicProfile;
+    try {
+      if (req.user.role === 'volunteer') {
+        console.log('🔧 Creating volunteer public profile...');
+        publicProfile = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          volunteerId: user.volunteerId,
+          role: req.user.role,
+          department: user.department,
+          isActive: user.isActive,
+          assignedEvents: user.assignedEvents || [],
+          permissions: user.permissions || [],
+          phone: user.phone,
+          faculty: user.faculty,
+          programme: user.programme,
+          year: user.year
+        };
+        console.log('✅ Volunteer public profile created');
+      } else if (req.user.role === 'stall_owner') {
+        console.log('🔧 Creating stall owner public profile...');
+        publicProfile = {
+          id: user.id,
+          name: user.name,
+          ownerName: user.ownerName,
+          ownerEmail: user.ownerEmail,
+          ownerContact: user.ownerContact,
+          role: req.user.role,
+          department: user.department,
+          location: user.location,
+          category: user.category,
+          description: user.description,
+          isActive: user.isActive,
+          event: user.event,
+          participants: user.participants || []
+        };
+        console.log('✅ Stall owner public profile created');
+      } else {
+        console.log('🔧 Creating regular user public profile...');
+        // For regular users, use toJSON method
+        publicProfile = user.toJSON();
+        console.log('✅ Regular user public profile created');
+      }
+    } catch (profileError) {
+      console.error('❌ Error creating public profile:', profileError);
+      throw profileError;
+    }
+
     res.status(200).json({
       success: true,
-      data: user.toJSON(),
+      data: publicProfile,
     });
   } catch (error) {
+    console.error('❌ GetMe error:', error);
     next(error);
   }
 };

@@ -42,6 +42,57 @@ const Feedback = sequelize.define('Feedback', {
       max: 5
     }
   },
+  // New 5-category rating system
+  qualityRating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Product/Service Quality Rating (1-5)'
+  },
+  serviceRating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Customer Service Rating (1-5)'
+  },
+  innovationRating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Innovation/Creativity Rating (1-5)'
+  },
+  presentationRating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Presentation/Display Rating (1-5)'
+  },
+  valueRating: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Value for Money Rating (1-5)'
+  },
+  averageRating: {
+    type: DataTypes.DECIMAL(3, 2),
+    allowNull: false,
+    comment: 'Calculated average of all 5 ratings'
+  },
   comments: {
     type: DataTypes.TEXT,
     allowNull: true

@@ -154,7 +154,18 @@ exports.getQRCode = async (req, res, next) => {
  */
 exports.submitFeedback = async (req, res, next) => {
   try {
-    const { stallId, eventId, rating, comments } = req.body;
+    const { 
+      stallId, 
+      eventId, 
+      rating, // Keep for backward compatibility
+      comments,
+      // New 5-category ratings
+      qualityRating,
+      serviceRating,
+      innovationRating,
+      presentationRating,
+      valueRating
+    } = req.body;
     const studentId = req.user.id;
 
     // DEBUG LOGGING
@@ -163,7 +174,27 @@ exports.submitFeedback = async (req, res, next) => {
     console.log('[FEEDBACK DEBUG] Student ID:', studentId);
     console.log('[FEEDBACK DEBUG] Stall ID:', stallId);
     console.log('[FEEDBACK DEBUG] Event ID:', eventId);
+    console.log('[FEEDBACK DEBUG] 5-Category Ratings:', {
+      quality: qualityRating,
+      service: serviceRating,
+      innovation: innovationRating,
+      presentation: presentationRating,
+      value: valueRating
+    });
     console.log('[FEEDBACK DEBUG] =================================\n');
+
+    // Validate that all 5 ratings are provided
+    if (!qualityRating || !serviceRating || !innovationRating || !presentationRating || !valueRating) {
+      return res.status(400).json({
+        success: false,
+        message: 'All 5 rating categories (Quality, Service, Innovation, Presentation, Value) are required'
+      });
+    }
+
+    // Calculate average rating
+    const averageRating = (qualityRating + serviceRating + innovationRating + presentationRating + valueRating) / 5;
+    
+    console.log('[FEEDBACK DEBUG] Calculated average rating:', averageRating);
 
     // Check if stall exists
     const stall = await Stall.findByPk(stallId);
@@ -220,8 +251,14 @@ exports.submitFeedback = async (req, res, next) => {
       studentId,
       stallId,
       eventId,
-      rating,
+      rating: Math.round(averageRating), // Keep old rating for compatibility
       comments,
+      qualityRating,
+      serviceRating,
+      innovationRating,
+      presentationRating,
+      valueRating,
+      averageRating: parseFloat(averageRating.toFixed(2))
     });
 
     // Update stall statistics after feedback submission
@@ -230,7 +267,12 @@ exports.submitFeedback = async (req, res, next) => {
         where: { stallId: stall.id },
         attributes: [
           [sequelize.fn('COUNT', sequelize.col('id')), 'totalFeedbacks'],
-          [sequelize.fn('AVG', sequelize.col('rating')), 'averageRating'],
+          [sequelize.fn('AVG', sequelize.col('averageRating')), 'overallAverageRating'], // Use new averageRating field
+          [sequelize.fn('AVG', sequelize.col('qualityRating')), 'avgQualityRating'],
+          [sequelize.fn('AVG', sequelize.col('serviceRating')), 'avgServiceRating'],
+          [sequelize.fn('AVG', sequelize.col('innovationRating')), 'avgInnovationRating'],
+          [sequelize.fn('AVG', sequelize.col('presentationRating')), 'avgPresentationRating'],
+          [sequelize.fn('AVG', sequelize.col('valueRating')), 'avgValueRating'],
         ],
         raw: true,
       });

@@ -25,29 +25,6 @@ export default function StallOwnerDashboard() {
   const prevFeedbackCountRef = useRef(0);
   const prevRankRef = useRef(null);
 
-  // Navigation items for the new 3-page layout
-  const navigationItems = [
-    { id: 'overview', label: 'Dashboard', icon: Home, description: 'Overview & Live Stats' },
-    { id: 'qr', label: 'QR Code', icon: QrCode, description: 'Your Stall QR Code' },
-    { id: 'rankings', label: 'Live Rankings', icon: Trophy, description: 'Vote-wise Rankings' },
-    { id: 'feedback', label: 'Feedback', icon: MessageSquare, description: 'Comments & Ratings' }
-  ];
-
-  // Helper functions
-  const getRankIcon = (rank) => {
-    if (rank === 1) return '🥇';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return `#${rank}`;
-  };
-
-  const getRankColor = (rank) => {
-    if (rank === 1) return 'text-amber-600 dark:text-amber-400';
-    if (rank === 2) return 'text-gray-600 dark:text-gray-400';  
-    if (rank === 3) return 'text-orange-600 dark:text-orange-400';
-    return 'text-slate-600 dark:text-slate-400';
-  };
-
   useEffect(() => {
     const stored = localStorage.getItem('stallData');
     const token = localStorage.getItem('accessToken');
@@ -78,7 +55,7 @@ export default function StallOwnerDashboard() {
     setSidebarOpen(false); // Close mobile sidebar
   };
 
-  // Data fetching hooks (keeping the existing API calls)
+  // Optimized data fetching with proper caching and error handling
   const { data: myStall, isLoading: loadingStall, error: stallError, refetch: refetchMyStall } = useQuery({
     queryKey: ['stallOwner', 'myStall'],
     queryFn: async () => {
@@ -88,18 +65,27 @@ export default function StallOwnerDashboard() {
         return response.data.data.stall;
       } catch (error) {
         console.error('Failed to fetch stall data:', error);
+        
+        // Handle authentication errors - but don't logout immediately, let user try manual refresh first
         if (error.response?.status === 401 || error.message?.includes('Session expired')) {
           console.log('Authentication error in stall data fetch:', error);
           toast.error('Authentication failed. Please try refreshing or login again.');
+          // Don't auto-logout immediately - let user try manual refresh first
         }
         throw error;
       }
     },
-    refetchInterval: autoRefresh ? 30000 : false,
-    staleTime: 15000,
-    cacheTime: 300000,
+    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds only if auto-refresh is enabled
+    staleTime: 15000, // Consider data fresh for 15 seconds
+    cacheTime: 300000, // Keep in cache for 5 minutes
     enabled: !!stallData,
-    retry: 1,
+    retry: 1, // Reduce retries for auth errors
+    onError: (error) => {
+      // Don't show generic error toast if it's an auth error (already handled above)
+      if (error.response?.status !== 401 && !error.message?.includes('Session expired')) {
+        toast.error('Failed to load stall data');
+      }
+    }
   });
 
   const { data: leaderboard, isLoading: loadingLeaderboard, error: leaderboardError, refetch: refetchLeaderboard } = useQuery({
@@ -111,18 +97,22 @@ export default function StallOwnerDashboard() {
         return response.data.data;
       } catch (error) {
         console.error('Failed to fetch leaderboard:', error);
+        
+        // Handle authentication errors - log but don't auto-logout immediately
         if (error.response?.status === 401 || error.message?.includes('Session expired')) {
           console.log('Authentication error in leaderboard fetch:', error);
+          // Don't auto-logout immediately - let user try manual refresh first
         }
         throw error;
       }
     },
-    refetchInterval: autoRefresh ? 45000 : false,
-    staleTime: 20000,
-    cacheTime: 300000,
+    refetchInterval: autoRefresh ? 45000 : false, // 45 seconds
+    staleTime: 20000, // Consider fresh for 20 seconds
+    cacheTime: 300000, // Keep in cache for 5 minutes
     enabled: !!stallData,
-    retry: 1,
+    retry: 1, // Reduce retries for auth errors
     onSuccess: (data) => {
+      // Smart notifications for rank changes
       if (prevRankRef.current !== null && data.myPosition !== prevRankRef.current) {
         if (data.myPosition < prevRankRef.current) {
           toast.success(`🎉 Moved up to rank #${data.myPosition}!`, { duration: 4000, icon: '📈' });
@@ -132,7 +122,23 @@ export default function StallOwnerDashboard() {
       }
       prevRankRef.current = data.myPosition;
     },
+    onError: (error) => {
+      // Don't show generic error toast if it's an auth error
+      if (error.response?.status !== 401 && !error.message?.includes('Session expired')) {
+        toast.error('Failed to load leaderboard');
+      }
+    }
   });
+
+  // Helper function to handle auth errors consistently - but don't auto-logout immediately
+  const handleAuthError = (error) => {
+    if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+      console.log('Authentication error detected:', error);
+      // Don't auto-logout immediately - let user see the error and try manual refresh
+      return true; // Indicates auth error was detected
+    }
+    return false;
+  };
 
   const { data: competitionStats, error: competitionError, refetch: refetchCompetitionStats } = useQuery({
     queryKey: ['stallOwner', 'competitionStats'],
@@ -142,14 +148,19 @@ export default function StallOwnerDashboard() {
         setLastUpdated(new Date());
         return response.data.data;
       } catch (error) {
-        if (error.response?.status !== 401) throw error;
+        if (!handleAuthError(error)) throw error;
       }
     },
-    refetchInterval: autoRefresh ? 60000 : false,
-    staleTime: 30000,
+    refetchInterval: autoRefresh ? 60000 : false, // 1 minute
+    staleTime: 30000, // 30 seconds
     cacheTime: 300000,
     enabled: !!stallData,
     retry: 1,
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load competition stats');
+      }
+    }
   });
 
   const { data: liveVotes, error: votesError, refetch: refetchVotes } = useQuery({
@@ -160,10 +171,10 @@ export default function StallOwnerDashboard() {
         setLastUpdated(new Date());
         return response.data.data;
       } catch (error) {
-        if (error.response?.status !== 401) throw error;
+        if (!handleAuthError(error)) throw error;
       }
     },
-    refetchInterval: autoRefresh ? 30000 : false,
+    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds for votes
     staleTime: 15000,
     cacheTime: 300000,
     enabled: !!stallData,
@@ -176,6 +187,11 @@ export default function StallOwnerDashboard() {
       }
       prevVoteCountRef.current = currentCount;
     },
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load votes');
+      }
+    }
   });
 
   const { data: liveFeedbacks, error: feedbacksError, refetch: refetchFeedbacks } = useQuery({
@@ -186,10 +202,10 @@ export default function StallOwnerDashboard() {
         setLastUpdated(new Date());
         return response.data.data;
       } catch (error) {
-        if (error.response?.status !== 401) throw error;
+        if (!handleAuthError(error)) throw error;
       }
     },
-    refetchInterval: autoRefresh ? 45000 : false,
+    refetchInterval: autoRefresh ? 45000 : false, // 45 seconds
     staleTime: 20000,
     cacheTime: 300000,
     enabled: !!stallData,
@@ -202,6 +218,11 @@ export default function StallOwnerDashboard() {
       }
       prevFeedbackCountRef.current = currentCount;
     },
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load feedbacks');
+      }
+    }
   });
 
   const { data: recentActivity, error: activityError, refetch: refetchRecentActivity } = useQuery({
@@ -212,14 +233,19 @@ export default function StallOwnerDashboard() {
         setLastUpdated(new Date());
         return response.data.data;
       } catch (error) {
-        if (error.response?.status !== 401) throw error;
+        if (!handleAuthError(error)) throw error;
       }
     },
-    refetchInterval: autoRefresh ? 60000 : false,
+    refetchInterval: autoRefresh ? 60000 : false, // 1 minute
     staleTime: 30000,
     cacheTime: 300000,
     enabled: !!stallData,
     retry: 1,
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load recent activity');
+      }
+    }
   });
 
   // Manual refresh function
@@ -261,16 +287,12 @@ export default function StallOwnerDashboard() {
     );
   }
 
-  // Handle auth errors - check all API endpoints for 401s
-  const authErrors = [stallError, leaderboardError, competitionError, votesError, feedbacksError, activityError].filter(error => 
+  // Handle auth errors
+  const authErrorCount = [stallError, leaderboardError].filter(error => 
     error?.response?.status === 401 || error?.message?.includes('Session expired')
-  );
+  ).length;
   
-  const authErrorCount = authErrors.length;
-  
-  // Only show session expired if multiple endpoints fail AND we don't have any stall data
-  // This prevents premature logout due to temporary network issues
-  const showSessionExpired = authErrorCount >= 3 && !myStall;
+  const showSessionExpired = authErrorCount >= 2;
 
   if (showSessionExpired && !myStall) {
     return (
@@ -986,4 +1008,458 @@ export default function StallOwnerDashboard() {
       </div>
     );
   }
+}
+
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* QR Code Modal */}
+        {showQR && (
+          <div className="card shadow-2xl bg-gradient-to-br from-white to-blue-50 dark:from-gray-800 dark:to-blue-900/20 border-4 border-blue-500 animate-scaleIn">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Your Stall QR Code</h2>
+              <p className="text-gray-600 dark:text-gray-400 mb-6">
+                Display this QR code so students can scan it to give feedback and votes
+              </p>
+              
+              {/* QR Code Display with Error Handling */}
+              {myStall?.qrCode ? (
+                <div className="bg-white p-6 rounded-2xl inline-block shadow-xl">
+                  <img 
+                    src={myStall.qrCode} 
+                    alt="Stall QR Code" 
+                    className="w-80 h-80"
+                    onError={(e) => {
+                      console.error('QR Code image failed to load:', e);
+                      e.target.style.display = 'none';
+                    }}
+                  />
+                </div>
+              ) : (
+                <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-2xl inline-block shadow-xl w-80 h-80 flex items-center justify-center">
+                  <div className="text-center">
+                    <QrCode size={48} className="mx-auto mb-4 text-gray-400" />
+                    <p className="text-gray-600 dark:text-gray-400">
+                      QR Code is being generated...
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                      Please wait a moment
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {myStall && (
+                <p className="text-sm text-gray-600 dark:text-gray-400 mt-4 font-mono bg-gray-100 dark:bg-gray-900 p-3 rounded-lg inline-block">
+                  {myStall.name} • {myStall.department}
+                </p>
+              )}
+              
+              <div className="flex gap-4 justify-center mt-6">
+                <button
+                  onClick={() => setShowQR(false)}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-3 bg-gray-600 text-white rounded-xl font-semibold hover:bg-gray-700 transition-colors"
+                  title="Refresh to regenerate QR code"
+                >
+                  <RefreshCw size={16} className="inline mr-2" />
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Live Rank & Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Current Rank */}
+          <div className="card bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-yellow-900/30 dark:to-orange-900/30 border-2 border-yellow-300 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300 mb-1">Your Rank</p>
+                <p className={`text-5xl font-bold ${getRankColor(leaderboard?.myPosition || 0)}`}>
+                  {getRankIcon(leaderboard?.myPosition || 0)}
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                  out of {leaderboard?.totalStalls || 0} stalls
+                </p>
+              </div>
+              <div className="flex flex-col items-center gap-2">
+                <Trophy className="w-12 h-12 text-yellow-600 dark:text-yellow-400" />
+              </div>
+            </div>
+            {competitionStats?.isLeading && (
+              <div className="mt-3 px-3 py-2 bg-yellow-200 dark:bg-yellow-900/50 rounded-lg text-center">
+                <p className="text-sm font-bold text-yellow-900 dark:text-yellow-100">🎉 YOU'RE LEADING!</p>
+              </div>
+            )}
+          </div>
+
+          {/* Total Votes */}
+          <div className="card bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/30 dark:to-cyan-900/30 border-2 border-blue-300 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-1">Total Votes</p>
+                <p className="text-5xl font-bold text-blue-600 dark:text-blue-400">
+                  {myStall?.stats?.totalVotes || 0}
+                </p>
+                {competitionStats?.voteGap > 0 && (
+                  <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                    -{competitionStats.voteGap} behind leader
+                  </p>
+                )}
+              </div>
+              <ThumbsUp className="w-12 h-12 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
+              {autoRefresh ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  <span>Auto-updating every 30s</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={12} className="text-gray-400" />
+                  <span>Manual refresh only</span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Total Feedbacks */}
+          <div className="card bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 border-2 border-purple-300 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-purple-700 dark:text-purple-300 mb-1">Total Feedbacks</p>
+                <p className="text-5xl font-bold text-purple-600 dark:text-purple-400">
+                  {myStall?.stats?.totalFeedbacks || 0}
+                </p>
+              </div>
+              <MessageSquare className="w-12 h-12 text-purple-600 dark:text-purple-400" />
+            </div>
+          </div>
+
+          {/* Average Rating */}
+          <div className="card bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/30 dark:to-emerald-900/30 border-2 border-green-300 shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:scale-105">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-green-700 dark:text-green-300 mb-1">Avg Rating</p>
+                <p className="text-5xl font-bold text-green-600 dark:text-green-400">
+                  {myStall?.stats?.averageRating || '0.0'}
+                </p>
+                <div className="flex items-center mt-1">
+                  {[1, 2, 3, 4, 5].map((star) => (
+                    <Star
+                      key={star}
+                      className={`w-4 h-4 ${
+                        star <= Math.round(parseFloat(myStall?.stats?.averageRating || 0))
+                          ? 'text-yellow-500 fill-yellow-500'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+              <Star className="w-12 h-12 text-yellow-500 fill-yellow-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* Department Leaderboard */}
+        <div className="card shadow-2xl border-2 border-yellow-300 dark:border-yellow-600">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Trophy className="text-yellow-600 dark:text-yellow-400" size={28} />
+              🏆 {leaderboard?.department} Department Leaderboard
+            </h2>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                <Activity size={18} className="text-blue-600 dark:text-blue-400" />
+                <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">LIVE</span>
+              </div>
+              {autoRefresh && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <RefreshCw size={16} className="text-green-600 dark:text-green-400 animate-spin" />
+                  <span className="text-xs font-semibold text-green-900 dark:text-green-100">Auto-refresh: 45s</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Competition Status Card */}
+          {competitionStats && (
+            <div className="mb-6 p-4 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-xl border-2 border-yellow-300 dark:border-yellow-600">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Your Position</p>
+                  <p className={`text-3xl font-bold ${getRankColor(competitionStats.myRank)}`}>
+                    {getRankBadge(competitionStats.myRank)}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Your Votes</p>
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{competitionStats.myVotes}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Leader Votes</p>
+                  <p className="text-3xl font-bold text-green-600 dark:text-green-400">{competitionStats.leadingVotes}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Gap to Leader</p>
+                  <p className={`text-3xl font-bold ${
+                    competitionStats.voteGap === 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {competitionStats.voteGap === 0 ? '✓' : `-${competitionStats.voteGap}`}
+                  </p>
+                </div>
+              </div>
+              {competitionStats.isLeading ? (
+                <div className="mt-4 p-3 bg-yellow-200 dark:bg-yellow-900/50 rounded-lg text-center">
+                  <p className="text-lg font-bold text-yellow-900 dark:text-yellow-100 flex items-center justify-center gap-2">
+                    <Trophy className="text-yellow-600" size={24} />
+                    🎉 YOU ARE THE LEADER! Keep it up! 🎉
+                  </p>
+                </div>
+              ) : competitionStats.voteGap <= 5 ? (
+                <div className="mt-4 p-3 bg-orange-200 dark:bg-orange-900/50 rounded-lg text-center">
+                  <p className="text-sm font-bold text-orange-900 dark:text-orange-100">
+                    🔥 You're close! Only {competitionStats.voteGap} vote{competitionStats.voteGap > 1 ? 's' : ''} behind the leader!
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gradient-to-r from-yellow-100 to-orange-100 dark:from-yellow-900/50 dark:to-orange-900/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Rank</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Stall Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Owner</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Votes</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Feedbacks</th>
+                  <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">Avg Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {leaderboard?.leaderboard?.map((stall) => (
+                  <tr
+                    key={stall.id}
+                    className={`${
+                      stall.isMyStall
+                        ? 'bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50 border-l-4 border-blue-600'
+                        : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    } transition-all duration-300`}
+                  >
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-2xl">
+                          {stall.rank === 1 && '🥇'}
+                          {stall.rank === 2 && '🥈'}
+                          {stall.rank === 3 && '🥉'}
+                          {stall.rank > 3 && `#${stall.rank}`}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <div>
+                          <div className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                            {stall.name}
+                            {stall.isMyStall && (
+                              <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">YOU</span>
+                            )}
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-400">{stall.location}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4 text-sm text-gray-700 dark:text-gray-300">{stall.ownerName}</td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{stall.voteCount}</span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="text-lg font-semibold text-purple-600 dark:text-purple-400">{stall.feedbackCount}</span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
+                        <span className="font-bold text-gray-900 dark:text-white">{stall.roundedRating}</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Recent Activity Stream */}
+        <div className="card shadow-xl border-2 border-green-200 dark:border-green-700">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
+            <Activity className="text-green-600 dark:text-green-400 animate-pulse" size={28} />
+            🔴 Live Activity Feed
+          </h2>
+
+          <div className="space-y-3 max-h-96 overflow-y-auto">
+            {recentActivity?.activities?.length > 0 ? (
+              recentActivity.activities.map((activity, idx) => (
+                <div
+                  key={`${activity.type}-${activity.id}-${idx}`}
+                  className="p-4 bg-gradient-to-r from-white to-gray-50 dark:from-gray-700 dark:to-gray-800 rounded-xl border-l-4 border-green-500 hover:shadow-lg transition-all duration-300 animate-fadeIn"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                      {activity.type === 'vote' ? (
+                        <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+                          <ThumbsUp className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                          <MessageSquare className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-semibold text-gray-900 dark:text-white">
+                          {activity.type === 'vote' ? '👍 New Vote' : '💬 New Feedback'}
+                        </p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
+                          <strong>{activity.student?.name}</strong> ({activity.student?.regNo})
+                        </p>
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
+                          {activity.student?.department} • {activity.student?.year}
+                        </p>
+                        {activity.type === 'feedback' && (
+                          <>
+                            <div className="flex items-center mt-2">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <Star
+                                  key={star}
+                                  className={`w-4 h-4 ${
+                                    star <= activity.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                            {activity.comment && (
+                              <p className="text-sm text-gray-700 dark:text-gray-300 mt-2 italic bg-gray-100 dark:bg-gray-900 p-2 rounded">
+                                "{activity.comment}"
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                      <Clock size={12} />
+                      {new Date(activity.timestamp).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+                <Activity className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                <p className="text-lg">No recent activity yet</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Charts Row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Rating Distribution */}
+          <div className="card shadow-xl">
+            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">📊 Rating Distribution</h3>
+            {ratingChartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={ratingChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="rating" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="count" fill="#8B5CF6" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500 dark:text-gray-400">
+                No rating data yet
+              </div>
+            )}
+          </div>
+
+          {/* Votes Trend */}
+          <div className="card shadow-xl">
+            <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">📈 Votes Trend (24 Hours)</h3>
+            {liveVotes?.votesTrend?.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={liveVotes.votesTrend.reverse()}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis 
+                    dataKey="hour" 
+                    tickFormatter={(value) => new Date(value).getHours() + ':00'}
+                  />
+                  <YAxis />
+                  <Tooltip labelFormatter={(value) => new Date(value).toLocaleString()} />
+                  <Line type="monotone" dataKey="count" stroke="#3B82F6" strokeWidth={3} name="Votes" />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[300px] flex items-center justify-center text-gray-500 dark:text-gray-400">
+                No votes trend data yet
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Live Feedbacks */}
+        <div className="card shadow-xl border-2 border-purple-200 dark:border-purple-700">
+          <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white flex items-center gap-2">
+            <MessageSquare className="text-purple-600 dark:text-purple-400" size={28} />
+            💬 Recent Feedbacks
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {liveFeedbacks?.feedbacks?.slice(0, 10).map((feedback) => (
+              <div
+                key={feedback.id}
+                className="p-4 bg-gradient-to-br from-white to-purple-50 dark:from-gray-700 dark:to-purple-900/20 rounded-xl border-2 border-purple-200 dark:border-purple-700 hover:shadow-lg transition-all"
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">{feedback.student?.name}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {feedback.student?.regNo} • {feedback.student?.department}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`w-4 h-4 ${
+                          star <= feedback.rating ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+                {feedback.comments && (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 italic bg-white dark:bg-gray-900 p-3 rounded-lg mt-2">
+                    "{feedback.comments}"
+                  </p>
+                )}
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  {new Date(feedback.createdAt).toLocaleString()}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

@@ -6,10 +6,65 @@ import { Star, Send, CheckCircle, AlertCircle, MessageSquare, Camera, X, Scan } 
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 export default function StudentFeedback() {
+  // Define the 5 rating categories
+  const ratingCategories = [
+    {
+      key: 'quality',
+      title: 'Product/Service Quality',
+      description: 'How good is the overall quality of products or services?',
+      icon: '⭐',
+      color: 'blue'
+    },
+    {
+      key: 'service',
+      title: 'Customer Service',
+      description: 'How helpful and friendly was the staff?',
+      icon: '🤝',
+      color: 'green'
+    },
+    {
+      key: 'innovation',
+      title: 'Innovation & Creativity',
+      description: 'How innovative and creative is their approach?',
+      icon: '💡',
+      color: 'purple'
+    },
+    {
+      key: 'presentation',
+      title: 'Presentation & Display',
+      description: 'How attractive and well-organized is their stall?',
+      icon: '🎨',
+      color: 'pink'
+    },
+    {
+      key: 'value',
+      title: 'Value for Money',
+      description: 'How good is the value compared to the price?',
+      icon: '💰',
+      color: 'orange'
+    }
+  ];
+
   const [selectedEvent, setSelectedEvent] = useState('');
   const [scannedStall, setScannedStall] = useState(null);
+  // Keep old rating for backward compatibility
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
+  // New 5-category rating states
+  const [ratings, setRatings] = useState({
+    quality: 0,
+    service: 0,
+    innovation: 0,
+    presentation: 0,
+    value: 0
+  });
+  const [hoverRatings, setHoverRatings] = useState({
+    quality: 0,
+    service: 0,
+    innovation: 0,
+    presentation: 0,
+    value: 0
+  });
   const [comment, setComment] = useState('');
   const [showScanner, setShowScanner] = useState(false);
   const [isProcessingScan, setIsProcessingScan] = useState(false);
@@ -84,6 +139,21 @@ export default function StudentFeedback() {
       setScannedStall(null);
       setRating(0);
       setComment('');
+      // Reset 5-category ratings
+      setRatings({
+        quality: 0,
+        service: 0,
+        innovation: 0,
+        presentation: 0,
+        value: 0
+      });
+      setHoverRatings({
+        quality: 0,
+        service: 0,
+        innovation: 0,
+        presentation: 0,
+        value: 0
+      });
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Failed to submit feedback');
@@ -340,8 +410,10 @@ export default function StudentFeedback() {
       return;
     }
 
-    if (rating === 0) {
-      toast.error('Please provide a rating');
+    // Check if all 5 ratings are provided
+    const allRatingsProvided = Object.values(ratings).every(rating => rating > 0);
+    if (!allRatingsProvided) {
+      toast.error('Please provide all 5 ratings (Quality, Service, Innovation, Presentation, Value)');
       return;
     }
 
@@ -350,11 +422,20 @@ export default function StudentFeedback() {
       return;
     }
 
+    // Calculate average for backward compatibility
+    const averageRating = Object.values(ratings).reduce((sum, rating) => sum + rating, 0) / 5;
+
     feedbackMutation.mutate({
       eventId: selectedEvent,
       stallId: scannedStall.id,
-      rating,
-      comment,
+      rating: Math.round(averageRating), // Keep for backward compatibility
+      comments: comment, // Backend expects 'comments' (plural)
+      // New 5-category ratings
+      qualityRating: ratings.quality,
+      serviceRating: ratings.service,
+      innovationRating: ratings.innovation,
+      presentationRating: ratings.presentation,
+      valueRating: ratings.value,
     });
   };
 
@@ -647,38 +728,106 @@ export default function StudentFeedback() {
               </div>
               
               <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
-                {/* Star Rating - Mobile Responsive */}
-                <div>
-                  <label className="block text-sm sm:text-base font-semibold text-gray-700 dark:text-gray-300 mb-2 sm:mb-3">
-                    Rating (1-5 stars) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="flex items-center justify-center space-x-1 sm:space-x-2 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-4 sm:p-6 rounded-xl sm:rounded-2xl">
-                    {[1, 2, 3, 4, 5].map((star) => (
-                      <button
-                        key={star}
-                        type="button"
-                        onClick={() => setRating(star)}
-                        onTouchStart={() => setHoverRating(star)}
-                        onTouchEnd={() => setHoverRating(0)}
-                        onMouseEnter={() => setHoverRating(star)}
-                        onMouseLeave={() => setHoverRating(0)}
-                        className="focus:outline-none transition-transform active:scale-110 sm:hover:scale-125 touch-manipulation p-1"
-                        disabled={!status?.isCheckedIn}
-                      >
-                        <Star
-                          className={`w-10 h-10 sm:w-12 sm:h-12 lg:w-14 lg:h-14 transition-all duration-200 ${
-                            star <= (hoverRating || rating)
-                              ? 'text-yellow-500 fill-yellow-500 drop-shadow-lg'
-                              : 'text-gray-300 dark:text-gray-600'
-                          }`}
-                        />
-                      </button>
-                    ))}
-                  </div>
-                  {rating > 0 && (
-                    <p className="text-center mt-3 text-2xl font-bold bg-gradient-to-r from-yellow-600 to-orange-600 bg-clip-text text-transparent">
-                      {rating} / 5 Stars {rating >= 4 ? '🌟' : rating >= 3 ? '⭐' : ''}
+                {/* 5-Category Rating System */}
+                <div className="space-y-6">
+                  <div className="text-center mb-6">
+                    <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-2">
+                      Rate Your Experience
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Please rate the stall on all 5 categories below
                     </p>
+                  </div>
+
+                  {ratingCategories.map((category, index) => {
+                    const currentRating = ratings[category.key];
+                    const currentHover = hoverRatings[category.key];
+                    
+                    const colorMap = {
+                      blue: 'from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20',
+                      green: 'from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20',
+                      purple: 'from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20',
+                      pink: 'from-pink-50 to-pink-100 dark:from-pink-900/20 dark:to-pink-800/20',
+                      orange: 'from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20'
+                    };
+                    
+                    return (
+                      <div key={category.key} className={`p-4 rounded-xl bg-gradient-to-r ${colorMap[category.color]} border border-gray-200 dark:border-gray-700`}>
+                        <div className="flex items-start gap-3 mb-3">
+                          <span className="text-2xl">{category.icon}</span>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900 dark:text-white text-sm sm:text-base">
+                              {category.title} <span className="text-red-500">*</span>
+                            </h4>
+                            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mt-1">
+                              {category.description}
+                            </p>
+                          </div>
+                        </div>
+                        
+                        {/* Star Rating for this category */}
+                        <div className="flex items-center justify-center space-x-1 sm:space-x-2 mb-2">
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setRatings(prev => ({ ...prev, [category.key]: star }))}
+                              onMouseEnter={() => setHoverRatings(prev => ({ ...prev, [category.key]: star }))}
+                              onMouseLeave={() => setHoverRatings(prev => ({ ...prev, [category.key]: 0 }))}
+                              className="focus:outline-none transition-transform active:scale-110 sm:hover:scale-125 touch-manipulation p-1"
+                              disabled={!status?.isCheckedIn}
+                            >
+                              <Star
+                                className={`w-6 h-6 sm:w-8 sm:h-8 transition-all duration-200 ${
+                                  star <= (currentHover || currentRating)
+                                    ? 'text-yellow-500 fill-yellow-500 drop-shadow-lg'
+                                    : 'text-gray-300 dark:text-gray-600'
+                                }`}
+                              />
+                            </button>
+                          ))}
+                        </div>
+                        
+                        {/* Rating Display */}
+                        {currentRating > 0 && (
+                          <p className="text-center text-sm font-medium text-gray-700 dark:text-gray-300">
+                            {currentRating}/5 {currentRating >= 4 ? '⭐' : currentRating >= 3 ? '👍' : ''}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Average Rating Display */}
+                  {Object.values(ratings).some(r => r > 0) && (
+                    <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-800">
+                      <div className="text-center">
+                        <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Overall Average</h4>
+                        <div className="flex items-center justify-center space-x-2">
+                          <div className="flex items-center space-x-1">
+                            {[1, 2, 3, 4, 5].map((star) => {
+                              const average = Object.values(ratings).reduce((sum, r) => sum + r, 0) / Object.values(ratings).filter(r => r > 0).length || 0;
+                              return (
+                                <Star
+                                  key={star}
+                                  className={`w-5 h-5 ${
+                                    star <= average
+                                      ? 'text-yellow-500 fill-yellow-500'
+                                      : 'text-gray-300 dark:text-gray-600'
+                                  }`}
+                                />
+                              );
+                            })}
+                          </div>
+                          <span className="font-bold text-lg text-yellow-600 dark:text-yellow-400">
+                            {Object.values(ratings).filter(r => r > 0).length > 0 
+                              ? (Object.values(ratings).reduce((sum, r) => sum + r, 0) / Object.values(ratings).filter(r => r > 0).length).toFixed(1)
+                              : '0.0'
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -706,7 +855,7 @@ export default function StudentFeedback() {
                   type="submit"
                   disabled={
                     !scannedStall ||
-                    rating === 0 ||
+                    !Object.values(ratings).every(rating => rating > 0) ||
                     feedbackMutation.isLoading ||
                     !status?.isCheckedIn
                   }

@@ -16,57 +16,59 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    // Check for existing session on mount
-    const checkAuth = async () => {
-      const token = localStorage.getItem('accessToken');
-      const refreshToken = localStorage.getItem('refreshToken');
-      
-      console.log('🔍 AuthContext: Checking auth on mount...', { 
-        hasToken: !!token, 
-        hasRefreshToken: !!refreshToken 
-      });
-      
-      if (token && refreshToken) {
-        try {
-          console.log('🔍 Fetching /auth/me...');
-          const response = await api.get('/auth/me');
-          setUser(response.data.data);
-          console.log('✅ Auth restored successfully:', response.data.data.email, response.data.data.role);
-        } catch (error) {
-          console.error('❌ /auth/me failed:', {
-            status: error.response?.status,
-            message: error.response?.data?.message,
-            error: error.message
-          });
-          
-          // Only clear tokens if it's a 401/403 (unauthorized)
-          // Don't clear on network errors (500, timeout, etc.)
-          if (error.response?.status === 401 || error.response?.status === 403) {
-            console.log('🔐 Unauthorized - clearing tokens');
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            setUser(null);
-          } else if (error.code === 'ERR_NETWORK' || !error.response) {
-            console.log('⚠️ Network error - will retry on next request');
-            // Keep tokens but set user to null temporarily
-            setUser(null);
-          } else {
-            console.log('⚠️ Server error - clearing tokens');
-            localStorage.removeItem('accessToken');
-            localStorage.removeItem('refreshToken');
-            setUser(null);
+  // Check for existing session on mount
+  const checkAuth = async (retryCount = 0) => {
+    const token = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    
+    console.log('🔍 AuthContext: Checking auth on mount...', { 
+      hasToken: !!token, 
+      hasRefreshToken: !!refreshToken,
+      retryCount 
+    });
+    
+    if (token && refreshToken) {
+      try {
+        console.log('🔍 Fetching /auth/me...');
+        const response = await api.get('/auth/me');
+        setUser(response.data.data);
+        console.log('✅ Auth restored successfully:', response.data.data.email, response.data.data.role);
+      } catch (error) {
+        console.error('❌ /auth/me failed:', {
+          status: error.response?.status,
+          message: error.response?.data?.message,
+          error: error.message
+        });
+        
+        // Only clear tokens if it's a definitive auth failure (401/403)
+        // Keep tokens for server errors (500), network errors, etc.
+        if (error.response?.status === 401 || error.response?.status === 403) {
+          console.log('🔐 Unauthorized - clearing tokens');
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
+          setUser(null);
+        } else {
+          console.log('⚠️ Server/Network error - keeping tokens for retry');
+          // Keep tokens but set user to null temporarily
+          // Retry once after a short delay for server errors
+          if (retryCount === 0 && (error.response?.status >= 500 || error.code === 'ERR_NETWORK')) {
+            console.log('🔄 Retrying auth check in 2 seconds...');
+            setTimeout(() => checkAuth(1), 2000);
+            return;
           }
+          setUser(null);
         }
-      } else {
-        console.log('ℹ️ No tokens found in localStorage');
-        setUser(null);
       }
-      
-      setIsLoading(false);
-      console.log('✅ Auth check complete');
-    };
+    } else {
+      console.log('ℹ️ No tokens found in localStorage');
+      setUser(null);
+    }
+    
+    setIsLoading(false);
+    console.log('✅ Auth check complete');
+  };
 
+  useEffect(() => {
     checkAuth();
   }, []);
 
@@ -138,6 +140,13 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const retryAuth = async () => {
+    console.log('🔄 Manual auth retry requested');
+    setIsLoading(true);
+    await checkAuth(0);
+    setIsLoading(false);
+  };
+
   const value = {
     user,
     isLoading,
@@ -145,6 +154,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateProfile,
+    retryAuth,
     isAuthenticated: !!user,
   };
 

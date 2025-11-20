@@ -1,5 +1,5 @@
-const User = require('../models/User');
-const Volunteer = require('../models/Volunteer');
+const bcrypt = require('bcryptjs');
+const { User, Volunteer } = require('../models/index.sequelize');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 
 /**
@@ -12,7 +12,7 @@ exports.register = async (req, res, next) => {
     const { name, email, password, role, rollNo, programme, department, phone } = req.body;
 
     // Check if user exists
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({
         success: false,
@@ -22,7 +22,7 @@ exports.register = async (req, res, next) => {
 
     // Check rollNo uniqueness for students
     if (rollNo) {
-      const existingRollNo = await User.findOne({ rollNo });
+      const existingRollNo = await User.findOne({ where: { rollNo } });
       if (existingRollNo) {
         return res.status(400).json({
           success: false,
@@ -44,14 +44,21 @@ exports.register = async (req, res, next) => {
     });
 
     // Generate tokens
-    const accessToken = generateAccessToken(user._id, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    const accessToken = generateAccessToken(user.id, user.role);
+    const refreshToken = generateRefreshToken(user.id);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
       data: {
-        user: user.getPublicProfile(),
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          regNo: user.regNo,
+          department: user.department,
+        },
         accessToken,
         refreshToken,
       },
@@ -81,13 +88,13 @@ exports.login = async (req, res, next) => {
 
     // Try to find user in Users table first
     if (email) {
-      user = await User.findOne({ email }).select('+password');
+      user = await User.findOne({ where: { email } });
       if (user) {
         userType = 'user';
         console.log('👤 Found in Users table by email:', user.email);
       }
     } else if (regNo) {
-      user = await User.findOne({ regNo }).select('+password');
+      user = await User.findOne({ where: { regNo } });
       if (user) {
         userType = 'user';
         console.log('👤 Found in Users table by regNo:', user.regNo);
@@ -97,13 +104,13 @@ exports.login = async (req, res, next) => {
     // If not found in Users table, try Volunteers table
     if (!user) {
       if (email) {
-        user = await Volunteer.findOne({ email }).select('+password');
+        user = await Volunteer.findOne({ where: { email } });
         if (user) {
           userType = 'volunteer';
           console.log('👤 Found in Volunteers table by email:', user.email);
         }
       } else if (volunteerId) {
-        user = await Volunteer.findOne({ volunteerId }).select('+password');
+        user = await Volunteer.findOne({ where: { volunteerId } });
         if (user) {
           userType = 'volunteer';
           console.log('👤 Found in Volunteers table by volunteerId:', user.volunteerId);
@@ -142,7 +149,7 @@ exports.login = async (req, res, next) => {
 
     // Verify password
     console.log('🔍 Entered password:', password?.substring(0, 3) + '***');
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await bcrypt.compare(password, user.password);
     console.log('🔑 Password match result:', isMatch);
     
     if (!isMatch) {
@@ -152,9 +159,13 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save({ validateBeforeSave: false });
+    // Update last login (for volunteers, use lastLoginAt field)
+    if (userType === 'volunteer') {
+      user.lastLoginAt = new Date();
+    } else {
+      user.lastLogin = new Date();
+    }
+    await user.save();
 
     // Determine role for token generation
     const role = userType === 'volunteer' ? 'volunteer' : user.role;
@@ -165,11 +176,35 @@ exports.login = async (req, res, next) => {
 
     console.log('✅ Login successful for:', userType === 'volunteer' ? user.volunteerId : user.email);
 
+    // Create public profile based on user type
+    let publicProfile;
+    if (userType === 'volunteer') {
+      publicProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        volunteerId: user.volunteerId,
+        role: 'volunteer',
+        department: user.department,
+        isActive: user.isActive,
+      };
+    } else {
+      publicProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        regNo: user.regNo,
+        department: user.department,
+        isActive: user.isActive,
+      };
+    }
+
     res.status(200).json({
       success: true,
       message: 'Login successful',
       data: {
-        user: user.getPublicProfile(),
+        user: publicProfile,
         accessToken,
         refreshToken,
       },
@@ -200,12 +235,12 @@ exports.refreshToken = async (req, res, next) => {
     const decoded = verifyToken(refreshToken, true);
 
     // Get user from appropriate table
-    let user = await User.findById(decoded.userId);
+    let user = await User.findByPk(decoded.userId);
     let userRole = user?.role || 'user';
     
     // If not found in Users, try Volunteers
     if (!user) {
-      user = await Volunteer.findById(decoded.userId);
+      user = await Volunteer.findByPk(decoded.userId);
       userRole = 'volunteer';
     }
     
@@ -256,23 +291,41 @@ exports.logout = async (req, res, next) => {
  */
 exports.getMe = async (req, res, next) => {
   try {
+    console.log('🔍 GetMe called for user:', req.user);
     let user = null;
     
     // Check if it's a volunteer first (based on role in token)
     if (req.user.role === 'volunteer') {
-      user = await Volunteer.findById(req.user.id);
+      console.log('🤝 Looking up volunteer with ID:', req.user.id);
+      user = await Volunteer.findByPk(req.user.id);
+      console.log('🤝 Volunteer from DB:', user ? {
+        id: user.id,
+        volunteerId: user.volunteerId,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive
+      } : 'null');
     } else {
-      user = await User.findById(req.user.id);
+      console.log('👤 Looking up regular user with ID:', req.user.id);
+      user = await User.findByPk(req.user.id);
+      console.log('👤 User from DB:', user ? {
+        id: user.id,
+        regNo: user.regNo,
+        name: user.name,
+        email: user.email,
+        isActive: user.isActive
+      } : 'null');
     }
     
     if (!user) {
+      console.log('❌ User not found in database');
       return res.status(404).json({
         success: false,
         message: 'User not found',
       });
     }
     
-    console.log('GetMe - User Details:', {
+    console.log('✅ GetMe - User Details:', {
       id: user.id,
       email: user.email,
       role: req.user.role,
@@ -280,11 +333,54 @@ exports.getMe = async (req, res, next) => {
       isActive: user.isActive
     });
 
+    // Handle different user types for public profile
+    let publicProfile;
+    try {
+      if (req.user.role === 'volunteer') {
+        console.log('🔧 Creating volunteer public profile...');
+        // Create public profile for volunteer manually
+        publicProfile = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          volunteerId: user.volunteerId,
+          role: req.user.role,
+          department: user.department,
+          isActive: user.isActive,
+          assignedEvents: user.assignedEvents || [],
+          permissions: user.permissions || [],
+        };
+        console.log('✅ Volunteer public profile created:', publicProfile);
+      } else {
+        console.log('🔧 Creating regular user public profile...');
+        // For regular users, use the getPublicProfile method if it exists
+        if (typeof user.getPublicProfile === 'function') {
+          publicProfile = user.getPublicProfile();
+        } else {
+          // Fallback to manual creation
+          publicProfile = {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            regNo: user.regNo,
+            role: req.user.role,
+            department: user.department,
+            isActive: user.isActive,
+          };
+        }
+        console.log('✅ Regular user public profile created:', publicProfile);
+      }
+    } catch (profileError) {
+      console.error('❌ Error creating public profile:', profileError);
+      throw profileError;
+    }
+
     res.status(200).json({
       success: true,
-      data: user.getPublicProfile(),
+      data: publicProfile,
     });
   } catch (error) {
+    console.error('❌ GetMe error:', error);
     next(error);
   }
 };
@@ -309,23 +405,43 @@ exports.updateProfile = async (req, res, next) => {
     
     // Update appropriate table based on user role
     if (req.user.role === 'volunteer') {
-      user = await Volunteer.findByIdAndUpdate(
-        req.user.id,
-        updates,
-        { new: true, runValidators: true }
-      );
+      user = await Volunteer.findByPk(req.user.id);
+      if (user) {
+        await user.update(updates);
+      }
     } else {
-      user = await User.findByIdAndUpdate(
-        req.user.id,
-        updates,
-        { new: true, runValidators: true }
-      );
+      user = await User.findByPk(req.user.id);
+      if (user) {
+        await user.update(updates);
+      }
+    }
+
+    // Create public profile response
+    let publicProfile;
+    if (req.user.role === 'volunteer') {
+      publicProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        volunteerId: user.volunteerId,
+        role: 'volunteer',
+        department: user.department,
+      };
+    } else {
+      publicProfile = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        regNo: user.regNo,
+        department: user.department,
+      };
     }
 
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      data: user.getPublicProfile(),
+      data: publicProfile,
     });
   } catch (error) {
     next(error);
@@ -358,13 +474,13 @@ exports.changePassword = async (req, res, next) => {
     // Get user with password from appropriate table
     let user = null;
     if (req.user.role === 'volunteer') {
-      user = await Volunteer.findById(req.user.id).select('+password');
+      user = await Volunteer.findByPk(req.user.id);
     } else {
-      user = await User.findById(req.user.id).select('+password');
+      user = await User.findByPk(req.user.id);
     }
 
     // Verify current password
-    const isMatch = await user.comparePassword(currentPassword);
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -372,8 +488,9 @@ exports.changePassword = async (req, res, next) => {
       });
     }
 
-    // Update password
-    user.password = newPassword;
+    // Hash new password and update
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
     await user.save();
 
     res.status(200).json({

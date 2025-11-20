@@ -4,6 +4,8 @@ const attendanceAnalytics = require('../controllers/attendanceAnalytics');
 const ultraSimpleAttendance = require('../controllers/ultraSimpleAttendance');
 const feedbackAnalytics = require('../controllers/feedbackAnalytics');
 const simpleFeedbackAnalytics = require('../controllers/simpleFeedbackAnalytics');
+const detailedFeedbackAnalytics = require('../controllers/detailedFeedbackAnalytics');
+const migrationController = require('../controllers/migrationController');
 const stallRankingAnalytics = require('../controllers/stallRankingAnalytics');
 const departmentAttendanceAnalytics = require('../controllers/departmentAttendanceAnalytics');
 const scanLogAnalytics = require('../controllers/scanLogAnalytics');
@@ -95,6 +97,11 @@ router.get('/analytics/feedback-overview', feedbackAnalytics.getFeedbackOverview
 router.get('/analytics/test-feedback', simpleFeedbackAnalytics.testFeedbackTable);
 router.get('/analytics/feedback-simple/:eventId', simpleFeedbackAnalytics.getSimpleFeedbackGivers);
 
+// Detailed 5-Category Feedback Analytics 
+router.get('/analytics/detailed-feedback-rankings', detailedFeedbackAnalytics.getDetailedFeedbackRankings);
+router.get('/analytics/stall-feedback-details/:stallId', detailedFeedbackAnalytics.getStallFeedbackDetails);
+router.get('/analytics/feedback-analytics-overview', detailedFeedbackAnalytics.getFeedbackAnalyticsOverview);
+
 // Stall Ranking Analytics (Department-wise voting rankings)
 router.get('/analytics/test-voting', stallRankingAnalytics.testVotingSystem);
 router.get('/analytics/top-stalls-by-department/:eventId', stallRankingAnalytics.getTopStallsByDepartment);
@@ -130,5 +137,8 @@ router.get('/reports/votes', adminController.exportVoteReport);
 // Manual corrections
 router.put('/attendances/:id', adminController.updateAttendance);
 router.delete('/attendances/:id', adminController.deleteAttendance);
+
+// Database Migrations
+router.post('/migrate/feedback-ratings', protect, authorize('admin'), migrationController.runFeedbackRatingMigration);
 
 module.exports = router;

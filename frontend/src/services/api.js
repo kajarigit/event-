@@ -207,6 +207,11 @@ export const adminApi = {
   getRealTimeScans: (params) => api.get('/admin/analytics/real-time-scans', { params }),
   exportScanLogs: (params) => api.get('/admin/analytics/export-scan-logs', { params, responseType: 'blob' }),
 
+  // Detailed 5-Category Feedback Analytics
+  getDetailedFeedbackRankings: (params) => api.get('/admin/analytics/detailed-feedback-rankings', { params }),
+  getStallFeedbackDetails: (stallId, params) => api.get(`/admin/analytics/stall-feedback-details/${stallId}`, { params }),
+  getFeedbackAnalyticsOverview: (params) => api.get('/admin/analytics/feedback-analytics-overview', { params }),
+
   // Reports
   exportAttendance: (params) => api.get('/admin/reports/attendance', { params, responseType: 'blob' }),
   exportFeedbacks: (params) => api.get('/admin/reports/feedbacks', { params, responseType: 'blob' }),
