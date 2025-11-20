@@ -37,12 +37,13 @@ const ScanLog = sequelize.define('ScanLog', {
   scannedBy: {
     type: DataTypes.UUID,
     allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id'
-    },
-    onDelete: 'SET NULL',
-    comment: 'The volunteer/admin who performed the scan'
+    comment: 'The volunteer/admin who performed the scan (references either users or volunteers table)'
+  },
+  scannedByType: {
+    type: DataTypes.ENUM('user', 'volunteer'),
+    allowNull: true,
+    defaultValue: 'volunteer',
+    comment: 'Indicates whether scannedBy refers to users table or volunteers table'
   },
   gate: {
     type: DataTypes.STRING,
@@ -83,5 +84,26 @@ const ScanLog = sequelize.define('ScanLog', {
     }
   ]
 });
+
+// Define associations
+ScanLog.associate = function(models) {
+  // ScanLog belongs to a volunteer (scanner)
+  ScanLog.belongsTo(models.Volunteer, {
+    foreignKey: 'scannedBy',
+    as: 'scanner'
+  });
+  
+  // ScanLog belongs to a user (scanned student)
+  ScanLog.belongsTo(models.User, {
+    foreignKey: 'scannedUser',
+    as: 'student'
+  });
+  
+  // ScanLog belongs to an event
+  ScanLog.belongsTo(models.Event, {
+    foreignKey: 'eventId',
+    as: 'event'
+  });
+};
 
 module.exports = ScanLog;

@@ -69,7 +69,7 @@ exports.getSimpleFeedbackGivers = async (req, res) => {
     const studentIds = sortedStudents.map(item => item.studentId);
     const students = await User.findAll({
       where: { id: studentIds },
-      attributes: ['id', 'name', 'regNo', 'email', 'department', 'faculty', 'programme', 'year', 'phone']
+      attributes: ['id', 'name', 'regNo', 'department', 'faculty', 'programme', 'year', 'phone']
     });
 
     const studentLookup = {};
@@ -87,7 +87,6 @@ exports.getSimpleFeedbackGivers = async (req, res) => {
           id: student.id,
           name: student.name,
           regNo: student.regNo,
-          email: student.email,
           department: student.department,
           faculty: student.faculty,
           programme: student.programme,

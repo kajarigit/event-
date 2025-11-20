@@ -12,11 +12,18 @@ exports.login = async (req, res, next) => {
   try {
     const { email, password, stallId } = req.body; // Support both email and legacy stallId
 
-    // Prioritize email login, but support legacy stallId for backward compatibility
-    if (!password || (!email && !stallId)) {
+    // Require either email or stallId for login
+    if (!password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide email (or Stall ID) and password',
+        message: 'Password is required',
+      });
+    }
+    
+    if (!email && !stallId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide email or Stall ID',
       });
     }
 
@@ -62,7 +69,7 @@ exports.login = async (req, res, next) => {
       }
     }
 
-    // Verify password (support both hashed and plain text for backward compatibility)
+    // Verify password using the new instance method
     if (!stall.ownerPassword) {
       return res.status(401).json({
         success: false,
@@ -70,29 +77,8 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    let isPasswordValid = false;
+    const isPasswordValid = await stall.matchOwnerPassword(password);
     
-    // Check if password is hashed (bcrypt hashes start with $2a$, $2b$, or $2y$)
-    if (stall.ownerPassword.startsWith('$2')) {
-      // Use bcrypt to compare hashed password
-      isPasswordValid = await bcrypt.compare(password, stall.ownerPassword);
-    } else {
-      // Plain text comparison for legacy passwords
-      isPasswordValid = (password === stall.ownerPassword);
-      
-      // Auto-upgrade to hashed password on successful login
-      if (isPasswordValid) {
-        try {
-          const hashedPassword = await bcrypt.hash(password, 10);
-          await stall.update({ ownerPassword: hashedPassword });
-          console.log(`✅ Auto-upgraded password to hash for stall ${stall.id}`);
-        } catch (upgradeError) {
-          console.error('Failed to upgrade password:', upgradeError.message);
-          // Continue with login even if upgrade fails
-        }
-      }
-    }
-
     if (!isPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -100,13 +86,19 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Check if stall owner has email configured
-    if (!stall.ownerEmail) {
-      return res.status(400).json({
-        success: false,
-        message: 'This stall does not have an owner email configured. Please contact the administrator.',
-      });
+    // Auto-upgrade plain text passwords to hashed on successful login
+    if (!stall.ownerPassword.startsWith('$2')) {
+      try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await stall.update({ ownerPassword: hashedPassword });
+        console.log(`✅ Auto-upgraded password to hash for stall ${stall.id}`);
+      } catch (upgradeError) {
+        console.error('Failed to upgrade password:', upgradeError.message);
+        // Continue with login even if upgrade fails
+      }
     }
+
+    // Keep email functionality for stall owners (email is optional but recommended)
 
     // Generate tokens (use stall ID as identifier)
     const accessToken = generateAccessToken(stall.id, 'stall_owner');
@@ -324,7 +316,7 @@ exports.getLiveVotes = async (req, res, next) => {
         {
           model: User,
           as: 'student',
-          attributes: ['id', 'name', 'rollNumber', 'department', 'year']
+          attributes: ['id', 'name', 'regNo', 'department', 'year']
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -358,6 +350,12 @@ exports.getLiveVotes = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('❌ Error in getLiveVotes:', {
+      message: error.message,
+      stack: error.stack,
+      stallId: req.user?.id,
+      query: req.query
+    });
     next(error);
   }
 };
@@ -378,7 +376,7 @@ exports.getLiveFeedbacks = async (req, res, next) => {
         {
           model: User,
           as: 'student',
-          attributes: ['id', 'name', 'rollNumber', 'department', 'year']
+          attributes: ['id', 'name', 'regNo', 'department', 'year']
         }
       ],
       order: [['createdAt', 'DESC']],
@@ -426,6 +424,12 @@ exports.getLiveFeedbacks = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('❌ Error in getLiveFeedbacks:', {
+      message: error.message,
+      stack: error.stack,
+      stallId: req.user?.id,
+      query: req.query
+    });
     next(error);
   }
 };
@@ -533,7 +537,7 @@ exports.getRecentActivity = async (req, res, next) => {
         {
           model: User,
           as: 'student',
-          attributes: ['name', 'rollNumber', 'department']
+          attributes: ['name', 'regNo', 'department']
         }
       ],
       attributes: ['id', 'createdAt'],
@@ -547,10 +551,10 @@ exports.getRecentActivity = async (req, res, next) => {
         {
           model: User,
           as: 'student',
-          attributes: ['name', 'rollNumber', 'department']
+          attributes: ['name', 'regNo', 'department']
         }
       ],
-      attributes: ['id', 'rating', 'comment', 'createdAt'],
+      attributes: ['id', 'rating', 'comments', 'createdAt'],
       limit: parseInt(limit)
     });
 
@@ -566,7 +570,7 @@ exports.getRecentActivity = async (req, res, next) => {
         type: 'feedback',
         id: f.id,
         rating: f.rating,
-        comment: f.comment,
+        comment: f.comments,
         student: f.student,
         timestamp: f.createdAt
       }))
@@ -581,6 +585,12 @@ exports.getRecentActivity = async (req, res, next) => {
       },
     });
   } catch (error) {
+    console.error('❌ Error in getRecentActivity:', {
+      message: error.message,
+      stack: error.stack,
+      stallId: req.user?.id,
+      query: req.query
+    });
     next(error);
   }
 };

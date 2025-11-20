@@ -1,1 +1,1 @@
-name,email,password,role,phone,regNo,faculty,department,programme
+name,email,password,volunteerId,phone,faculty,department,programme,year,permissions,assignedEvents,shiftStart,shiftEnd,joinDate,notes

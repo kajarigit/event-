@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { User, Attendance } = require('../models/index.sequelize');
+const { User, Volunteer, Stall, Attendance } = require('../models/index.sequelize');
 
 /**
  * Protect routes - verify JWT token
@@ -33,23 +33,75 @@ const protect = async (req, res, next) => {
     
     console.log('🔐 Token decoded:', { userId: decoded.userId, role: decoded.role });
 
-    // Get user from token
-    req.user = await User.findByPk(decoded.userId);
-
-    if (!req.user) {
-      return res.status(401).json({
-        success: false,
-        message: 'User not found',
+    // Get user/stall based on role
+    if (decoded.role === 'stall_owner') {
+      // For stall owners, look in the Stall table
+      req.user = await Stall.findByPk(decoded.userId, {
+        attributes: { exclude: ['ownerPassword'] }
       });
-    }
+      
+      if (!req.user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Stall owner not found',
+        });
+      }
 
-    console.log('👤 User from DB:', { id: req.user.id, email: req.user.email, role: req.user.role });
+      console.log('🏪 Stall owner from DB:', { id: req.user.id, stallName: req.user.stallName, ownerName: req.user.ownerName });
+      
+      // Add role to the user object for consistency
+      req.user.role = 'stall_owner';
+      
+    } else {
+      // For regular users (students/admins), look in the User table
+      // For volunteers, look in the Volunteer table
+      let user;
+      
+      if (decoded.role === 'volunteer') {
+        // Look in Volunteer table
+        user = await Volunteer.findByPk(decoded.userId);
+        
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'Volunteer not found',
+          });
+        }
 
-    if (!req.user.isActive) {
-      return res.status(401).json({
-        success: false,
-        message: 'User account is deactivated',
-      });
+        console.log('🤝 Volunteer from DB:', { id: user.id, volunteerId: user.volunteerId, name: user.name });
+
+        if (!user.isActive) {
+          return res.status(401).json({
+            success: false,
+            message: 'Volunteer account is deactivated',
+          });
+        }
+        
+        // Add role to the volunteer object for consistency
+        user.role = 'volunteer';
+        
+      } else {
+        // Look in User table (students, admins)
+        user = await User.findByPk(decoded.userId);
+
+        if (!user) {
+          return res.status(401).json({
+            success: false,
+            message: 'User not found',
+          });
+        }
+
+        console.log('👤 User from DB:', { id: user.id, email: user.email, role: user.role });
+
+        if (!user.isActive) {
+          return res.status(401).json({
+            success: false,
+            message: 'User account is deactivated',
+          });
+        }
+      }
+      
+      req.user = user;
     }
 
     next();

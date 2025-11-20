@@ -34,32 +34,85 @@ async function getStudentCredentials() {
     console.log('Available tables:', tables.map(t => t.table_name).join(', '));
     console.log('');
 
-    // Get all students (trying lowercase table name)
+    // Get all students (using lowercase table name)
     const [students] = await sequelize.query(`
-      SELECT * FROM "Users"
+      SELECT id, name, "regNo", email, department, year, "isActive", "isVerified", "isFirstLogin"
+      FROM users
       WHERE role = 'student'
-      ORDER BY "createdAt" ASC
+      ORDER BY name ASC
     `);
 
-    console.log('👨‍🎓 STUDENT CREDENTIALS:\n');
-    console.log('='.repeat(80));
-    
+    if (students.length === 0) {
+      console.log('❌ No students found in database');
+      await sequelize.close();
+      process.exit(0);
+    }
+
+    console.log(`� Found ${students.length} student(s)\n`);
+    console.log('='.repeat(120));
+    console.log('STUDENT LOGIN CREDENTIALS');
+    console.log('='.repeat(120));
+    console.log('Default Password for ALL students: student123');
+    console.log('Students must verify with birthDate + PIN on first login, then set new password');
+    console.log('='.repeat(120));
+    console.log();
+
+    // Display in table format
+    console.log('┌─────┬────────────────────────────────┬────────────────┬──────────────────────────────┬────────────────┬──────┬────────┬──────────┬────────────┐');
+    console.log('│ No. │ Name                           │ RegNo (UID)    │ Email                        │ Department     │ Year │ Active │ Verified │ FirstLogin │');
+    console.log('├─────┼────────────────────────────────┼────────────────┼──────────────────────────────┼────────────────┼──────┼────────┼──────────┼────────────┤');
+
     students.forEach((student, index) => {
-      console.log(`\nStudent ${index + 1}:`);
-      console.log(`  Name: ${student.name}`);
-      console.log(`  Username: ${student.username}`);
-      console.log(`  Password: Student@123  (Default password for all students)`);
-      console.log(`  Email: ${student.email}`);
-      console.log(`  Roll Number: ${student.rollNumber}`);
-      console.log(`  ID: ${student.id}`);
-      console.log('-'.repeat(80));
+      const no = String(index + 1).padEnd(3);
+      const name = (student.name || '').substring(0, 30).padEnd(30);
+      const regNo = (student.regNo || '').substring(0, 14).padEnd(14);
+      const email = (student.email || 'N/A').substring(0, 28).padEnd(28);
+      const department = (student.department || 'N/A').substring(0, 14).padEnd(14);
+      const year = String(student.year || 'N/A').padEnd(4);
+      const isActive = student.isActive ? '  ✓   ' : '  ✗   ';
+      const isVerified = student.isVerified ? '   ✓    ' : '   ✗    ';
+      const isFirstLogin = student.isFirstLogin ? '     ✓     ' : '     ✗     ';
+
+      console.log(`│ ${no} │ ${name} │ ${regNo} │ ${email} │ ${department} │ ${year} │ ${isActive} │ ${isVerified} │ ${isFirstLogin} │`);
     });
 
-    console.log('\n📝 LOGIN INSTRUCTIONS:');
-    console.log('1. Go to the student login page');
-    console.log('2. Enter the username and password');
-    console.log('3. Default password: Student@123');
-    console.log('\n');
+    console.log('└─────┴────────────────────────────────┴────────────────┴──────────────────────────────┴────────────────┴──────┴────────┴──────────┴────────────┘');
+    console.log();
+
+    // Generate CSV format
+    console.log('\n📄 CSV FORMAT (for import/reference):');
+    console.log('='.repeat(120));
+    console.log('RegNo,Name,Email,Department,Year,DefaultPassword,Active,Verified,FirstLogin');
+    students.forEach(student => {
+      console.log(`${student.regNo || ''},"${student.name || ''}",${student.email || 'N/A'},${student.department || 'N/A'},${student.year || 'N/A'},student123,${student.isActive},${student.isVerified},${student.isFirstLogin}`);
+    });
+    console.log('='.repeat(120));
+
+    // Login instructions
+    console.log('\n📝 LOGIN INSTRUCTIONS FOR STUDENTS:');
+    console.log('='.repeat(120));
+    console.log('1. Go to login page and click "Student Login"');
+    console.log('2. Enter RegNo (UID) - NOT email');
+    console.log('3. Enter password: student123');
+    console.log('4. On first login, verify with:');
+    console.log('   - Birth Date (YYYY-MM-DD format)');
+    console.log('   - Permanent Address PIN Code (6 digits)');
+    console.log('5. After verification, set a new password');
+    console.log('6. Login again with RegNo + new password');
+    console.log('='.repeat(120));
+
+    // Statistics
+    console.log('\n📈 STATISTICS:');
+    console.log('='.repeat(120));
+    const activeCount = students.filter(s => s.isActive).length;
+    const verifiedCount = students.filter(s => s.isVerified).length;
+    const firstLoginCount = students.filter(s => s.isFirstLogin).length;
+    console.log(`Total Students: ${students.length}`);
+    console.log(`Active: ${activeCount} (${((activeCount/students.length)*100).toFixed(1)}%)`);
+    console.log(`Verified: ${verifiedCount} (${((verifiedCount/students.length)*100).toFixed(1)}%)`);
+    console.log(`Awaiting First Login: ${firstLoginCount} (${((firstLoginCount/students.length)*100).toFixed(1)}%)`);
+    console.log('='.repeat(120));
+    console.log();
 
   } catch (error) {
     console.error('Error:', error);

@@ -678,12 +678,12 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                   {stall.ownerEmail && (
                     <button
                       onClick={() => {
-                        // Show credentials for existing stall (password might not be available)
+                        // Show credentials for existing stall (display plain text password for admin)
                         setStallCredentials({
                           stallName: stall.name,
                           stallId: stall.id,
                           ownerEmail: stall.ownerEmail,
-                          password: '••••••••', // Hidden for security
+                          password: stall.plainTextPassword || 'No password available',
                           loginUrl: `${window.location.origin}/stall-owner/login`
                         });
                         setShowCredentialsModal(true);
@@ -1083,14 +1083,7 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                       <div className="bg-white p-3 rounded border border-green-200">
                         <div className="text-sm text-gray-600">Password:</div>
                         <div className="font-mono text-lg font-bold text-green-600 bg-gray-50 px-2 py-1 rounded">
-                          {stallCredentials.password === '••••••••' ? (
-                            <div className="flex items-center space-x-2">
-                              <span className="text-gray-400">••••••••</span>
-                              <span className="text-xs text-gray-500">(Hidden for security)</span>
-                            </div>
-                          ) : (
-                            stallCredentials.password
-                          )}
+                          {stallCredentials.password || 'No password available'}
                         </div>
                       </div>
                     </div>
@@ -1100,10 +1093,10 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
                     <div className="text-sm text-blue-700">
                       <div className="font-medium">📨 Email Status:</div>
                       <div>
-                        {stallCredentials.password === '••••••••' ? (
-                          'Stall owner information. Original credentials were sent via email during stall creation.'
-                        ) : (
+                        {stallCredentials.password && stallCredentials.password !== 'No password available' ? (
                           'Login credentials have been automatically sent to the stall owner\'s email address.'
+                        ) : (
+                          'No password available for this stall owner.'
                         )}
                       </div>
                     </div>
@@ -1121,20 +1114,20 @@ REPLACE_WITH_EVENT_UUID,IoT Solutions,Smart devices and IoT,Block B - Room 202,T
               <div className="flex space-x-3">
                 <button
                   onClick={() => {
-                    const credentialsText = stallCredentials.password === '••••••••' 
-                      ? `Stall Owner Information
-Stall: ${stallCredentials.stallName}
-Owner Email: ${stallCredentials.ownerEmail}
-Login URL: ${stallCredentials.loginUrl}
-
-Note: Password was previously sent via email during stall creation.`
-                      : `Stall Owner Login Credentials
+                    const credentialsText = stallCredentials.password && stallCredentials.password !== 'No password available'
+                      ? `Stall Owner Login Credentials
 Stall: ${stallCredentials.stallName}
 Email: ${stallCredentials.ownerEmail}
 Password: ${stallCredentials.password}
 Login URL: ${stallCredentials.loginUrl}
 
-Please save these credentials securely.`;
+Please save these credentials securely.`
+                      : `Stall Owner Information
+Stall: ${stallCredentials.stallName}
+Owner Email: ${stallCredentials.ownerEmail}
+Login URL: ${stallCredentials.loginUrl}
+
+Note: No password available for this stall.`;
                     
                     navigator.clipboard.writeText(credentialsText).then(() => {
                       toast.success('📋 Information copied to clipboard!', { duration: 2000 });

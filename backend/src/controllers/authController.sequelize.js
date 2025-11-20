@@ -1,4 +1,4 @@
-const { User } = require('../models/index.sequelize');
+const { User, Volunteer } = require('../models/index.sequelize');
 const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 
 /**
@@ -67,18 +67,51 @@ exports.register = async (req, res, next) => {
  */
 exports.login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, regNo, volunteerId, password, loginType } = req.body;
 
-    // Check if user exists (need raw query to get password)
-    const user = await User.findOne({ 
-      where: { email },
-      attributes: { include: ['password'] }
-    });
+    // Enforce specific login rules by user type:
+    // Students: UID (regNo) only
+    // Volunteers: volunteerID only (now in separate volunteers table)
+    // Stall Owners: email only (handled in separate controller)
+    // Admin: email only
     
+    let user;
+    let expectedRole;
+    
+    if (regNo && !email && !volunteerId) {
+      // Student login with UID
+      user = await User.findOne({ where: { regNo } });
+      expectedRole = 'student';
+    } else if (volunteerId && !email && !regNo) {
+      // Volunteer login with volunteer ID (check volunteers table)
+      user = await Volunteer.findOne({ where: { volunteerId } });
+      expectedRole = 'volunteer';
+    } else if (email && !regNo && !volunteerId) {
+      // Admin login with email (stall owners use separate endpoint)
+      user = await User.findOne({ where: { email } });
+      expectedRole = 'admin';
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid login method. Use: UID for students, volunteer ID for volunteers, or email for admin.',
+      });
+    }
+
     if (!user) {
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials',
+      });
+    }
+
+    // For volunteers, the role is implicit (no role field in volunteers table)
+    // For users, validate user role matches expected login method
+    if (expectedRole === 'volunteer') {
+      // Volunteer found in volunteers table - role is implicitly volunteer
+    } else if (user.role !== expectedRole) {
+      return res.status(401).json({
+        success: false,
+        message: `Invalid login method for ${user.role}. Please use the correct login page.`,
       });
     }
 
@@ -91,7 +124,35 @@ exports.login = async (req, res, next) => {
     }
 
     // Verify password
-    const isMatch = await user.matchPassword(password);
+    console.log('🔐 Attempting password verification for user:', user.id);
+    console.log('👤 User instance:', { 
+      id: user.id, 
+      name: user.name, 
+      regNo: user.regNo, 
+      hasPassword: !!user.password,
+      hasDataValues: !!user.dataValues,
+      dataValuesPassword: user.dataValues ? !!user.dataValues.password : false,
+      passwordLength: user.password ? user.password.length : 0
+    });
+    console.log('🔍 Entered password:', password ? `${password.substring(0, 3)}***` : 'empty');
+    
+    if (!user.password && !user.dataValues?.password) {
+      console.error('❌ User has no password stored in database!');
+      return res.status(500).json({
+        success: false,
+        message: 'User account is not properly configured',
+      });
+    }
+    
+    let isMatch;
+    try {
+      isMatch = await user.matchPassword(password);
+      console.log('🔑 Password match result:', isMatch);
+    } catch (matchError) {
+      console.error('❌ matchPassword error:', matchError.message);
+      throw matchError;
+    }
+    
     if (!isMatch) {
       return res.status(401).json({
         success: false,
@@ -99,20 +160,28 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate tokens
-    const accessToken = generateAccessToken(user.id, user.role);
+    // Generate tokens (set role to 'volunteer' for volunteer table users)
+    const userRole = expectedRole === 'volunteer' ? 'volunteer' : user.role;
+    const accessToken = generateAccessToken(user.id, userRole);
     const refreshToken = generateRefreshToken(user.id);
+
+    // Check if student needs to complete verification flow
+    const needsVerification = userRole === 'student' && user.isFirstLogin && !user.isVerified;
 
     res.status(200).json({
       success: true,
-      message: 'Login successful',
+      message: needsVerification ? 'First time login - verification required' : 'Login successful',
       data: {
-        user: user.toJSON(),
+        user: { ...user.toJSON(), role: userRole }, // Add role to response for volunteers
         accessToken,
         refreshToken,
+        needsVerification,
+        redirectTo: needsVerification ? '/student/verify' : '/dashboard'
       },
     });
   } catch (error) {
+    console.error('❌ Login error:', error.message);
+    console.error('Stack:', error.stack);
     next(error);
   }
 };
@@ -136,8 +205,16 @@ exports.refreshToken = async (req, res, next) => {
     // Verify refresh token
     const decoded = verifyToken(refreshToken, true);
 
-    // Get user
-    const user = await User.findByPk(decoded.userId);
+    // Get user from either users or volunteers table
+    let user = await User.findByPk(decoded.userId);
+    let userRole = user?.role;
+    
+    if (!user) {
+      // Try volunteers table
+      user = await Volunteer.findByPk(decoded.userId);
+      userRole = 'volunteer';
+    }
+    
     if (!user || !user.isActive) {
       return res.status(401).json({
         success: false,
@@ -146,7 +223,7 @@ exports.refreshToken = async (req, res, next) => {
     }
 
     // Generate new access token
-    const newAccessToken = generateAccessToken(user.id, user.role);
+    const newAccessToken = generateAccessToken(user.id, userRole);
 
     res.status(200).json({
       success: true,
@@ -257,9 +334,7 @@ exports.changePassword = async (req, res, next) => {
     }
 
     // Get user with password
-    const user = await User.findByPk(req.user.id, {
-      attributes: { include: ['password'] }
-    });
+    const user = await User.findByPk(req.user.id);
 
     // Verify current password
     const isMatch = await user.matchPassword(currentPassword);
@@ -277,6 +352,124 @@ exports.changePassword = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Password changed successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify student details (birthdate and pin code)
+ * @route   POST /api/auth/verify-student
+ * @access  Private (Student)
+ */
+exports.verifyStudent = async (req, res, next) => {
+  try {
+    const { birthDate, permanentAddressPinCode } = req.body;
+    const userId = req.user.id;
+
+    if (!birthDate || !permanentAddressPinCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'Birth date and permanent address PIN code are required',
+      });
+    }
+
+    // Get user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Check if user is a student
+    if (user.role !== 'student') {
+      return res.status(403).json({
+        success: false,
+        message: 'Only students can use this verification',
+      });
+    }
+
+    // For demo purposes, we'll store the verification data
+    // In real scenario, you'd validate against existing records
+    await user.update({
+      birthDate,
+      permanentAddressPinCode,
+      isVerified: true
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Verification successful. Please set your new password.',
+      data: {
+        userId: user.id,
+        canResetPassword: true
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reset password after verification
+ * @route   POST /api/auth/reset-password-after-verification
+ * @access  Private (Student)
+ */
+exports.resetPasswordAfterVerification = async (req, res, next) => {
+  try {
+    const { password, confirmPassword } = req.body;
+    const userId = req.user.id;
+
+    if (!password || !confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password and confirm password are required',
+      });
+    }
+
+    if (password !== confirmPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match',
+      });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long',
+      });
+    }
+
+    // Get user
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found',
+      });
+    }
+
+    // Check if user is verified
+    if (!user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please complete verification first',
+      });
+    }
+
+    // Update password and mark as not first login
+    await user.update({
+      password,
+      isFirstLogin: false
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password updated successfully. You can now login with your new password.',
     });
   } catch (error) {
     next(error);

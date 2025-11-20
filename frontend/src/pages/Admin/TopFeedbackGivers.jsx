@@ -89,7 +89,7 @@ export default function TopFeedbackGivers() {
 
     try {
       const csvContent = [
-        ['Rank', 'Student Name', 'Registration Number', 'Department', 'Faculty', 'Programme', 'Year', 'Email', 'Phone', 'Feedback Count'].join(','),
+        ['Rank', 'Student Name', 'Registration Number', 'Department', 'Faculty', 'Programme', 'Year', 'Phone', 'Feedback Count'].join(','),
         ...feedbackData.students.map(student => [
           student.rank,
           student.name,
@@ -98,7 +98,6 @@ export default function TopFeedbackGivers() {
           student.faculty || '',
           student.programme || '',
           student.year || '',
-          student.email || '',
           student.phone || '',
           student.feedbackCount
         ].map(cell => `"${cell}"`).join(','))
@@ -312,7 +311,7 @@ export default function TopFeedbackGivers() {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Programme</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Year</th>
                   <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Feedback Count</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reg No / Phone</th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
@@ -357,7 +356,7 @@ export default function TopFeedbackGivers() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900">
-                      <div>{student.email || 'N/A'}</div>
+                      <div className="font-medium">{student.regNo || 'N/A'}</div>
                       <div className="text-xs text-gray-500">{student.phone || ''}</div>
                     </td>
                   </tr>

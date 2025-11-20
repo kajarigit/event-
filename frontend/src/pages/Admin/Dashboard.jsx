@@ -14,6 +14,7 @@ import {
   Vote,
   TrendingUp,
   Activity,
+  UserCheck,
 } from 'lucide-react';
 
 // Admin sub-pages
@@ -21,6 +22,8 @@ import AdminOverview from './Overview';
 import Events from './Events';
 import Stalls from './Stalls';
 import UsersManagement from './Users';
+import VolunteersManagement from './Volunteers';
+import VolunteerScanTracking from './VolunteerScanTracking';
 import Analytics from './Analytics';
 import ComprehensiveAnalytics from './ComprehensiveAnalytics';
 import SimpleAttendance from './SimpleAttendance';
@@ -38,6 +41,8 @@ export default function AdminDashboard() {
     { name: 'Events', path: 'events', icon: Calendar },
     { name: 'Stalls', path: 'stalls', icon: Building2 },
     { name: 'Users', path: 'users', icon: Users },
+    { name: 'Volunteers', path: 'volunteers', icon: UserCheck },
+    { name: 'Volunteer Scanning', path: 'volunteer-tracking', icon: Activity },
     { name: 'Analytics', path: 'analytics', icon: BarChart3 },
     { name: 'Attendance Records', path: 'simple-attendance', icon: Users },
     { name: 'Top Feedback Givers', path: 'top-feedback', icon: MessageSquare },
@@ -153,6 +158,8 @@ export default function AdminDashboard() {
             <Route path="events" element={<Events />} />
             <Route path="stalls" element={<Stalls />} />
             <Route path="users" element={<UsersManagement />} />
+            <Route path="volunteers" element={<VolunteersManagement />} />
+            <Route path="volunteer-tracking" element={<VolunteerScanTracking />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="simple-attendance" element={<SimpleAttendance />} />
             <Route path="top-feedback" element={<TopFeedbackGivers />} />

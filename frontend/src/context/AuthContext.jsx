@@ -70,17 +70,23 @@ export const AuthProvider = ({ children }) => {
     checkAuth();
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (loginData) => {
     try {
-      const response = await api.post('/auth/login', { email, password });
-      const { user, accessToken, refreshToken } = response.data.data;
+      const response = await api.post('/auth/login', loginData);
+      const { user, accessToken, refreshToken, needsVerification, redirectTo } = response.data.data;
 
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('refreshToken', refreshToken);
       setUser(user);
 
+      // Handle first-time login verification
+      if (needsVerification) {
+        toast.success('Please complete verification to continue');
+        return { user, needsVerification, redirectTo };
+      }
+
       toast.success(`Welcome back, ${user.name}!`);
-      return user;
+      return { user, needsVerification: false };
     } catch (error) {
       const message = error.response?.data?.message || 'Login failed';
       toast.error(message);

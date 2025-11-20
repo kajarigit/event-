@@ -50,6 +50,7 @@ router.delete('/stalls/:id', adminController.deleteStall);
 router.get('/stalls/:id/qrcode', adminController.getStallQRCode);
 router.post('/stalls/bulk', upload.single('file'), adminController.bulkUploadStalls);
 router.post('/stalls/refresh-stats', adminController.refreshAllStallStats);
+router.post('/stalls/fix-passwords', adminController.fixStallPasswords); // Temporary endpoint
 
 // Users
 router.get('/users', adminController.getUsers);
@@ -58,6 +59,17 @@ router.get('/users/:id', adminController.getUser);
 router.put('/users/:id', adminController.updateUser);
 router.delete('/users/:id', adminController.deleteUser);
 router.post('/users/bulk', upload.single('file'), adminController.bulkUploadUsers);
+
+// Volunteers 
+router.get('/volunteers', adminController.getVolunteers);
+router.post('/volunteers', adminController.createVolunteer);
+router.get('/volunteers/:id', adminController.getVolunteer);
+router.put('/volunteers/:id', adminController.updateVolunteer);
+router.delete('/volunteers/:id', adminController.deleteVolunteer);
+router.post('/volunteers/bulk', upload.single('file'), adminController.bulkUploadVolunteers);
+router.get('/volunteers/credentials', adminController.getVolunteerCredentials);
+router.get('/volunteers/download-credentials', adminController.downloadVolunteerCredentials);
+router.get('/volunteers/scan-analytics', adminController.getVolunteerScanAnalytics);
 
 const basicAttendance = require('../controllers/basicAttendance');
 

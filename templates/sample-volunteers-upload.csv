@@ -1,11 +1,11 @@
-name,email,password,role,phone,regNo,faculty,department,programme
-Rajesh Kumar,rajesh.vol@event.com,Volunteer@123,volunteer,9876540001,VOL2024001,School of Engineering,Operations,Event Management
-Neha Sharma,neha.vol@event.com,Volunteer@123,volunteer,9876540002,VOL2024002,School of Engineering,Security,Event Management
-Arun Patel,arun.vol@event.com,Volunteer@123,volunteer,9876540003,VOL2024003,School of Engineering,Hospitality,Event Management
-Sneha Reddy,sneha.vol@event.com,Volunteer@123,volunteer,9876540004,VOL2024004,School of Engineering,Technical Support,Event Management
-Vikram Singh,vikram.vol@event.com,Volunteer@123,volunteer,9876540005,VOL2024005,School of Engineering,Registration,Event Management
-Priya Nair,priya.vol@event.com,Volunteer@123,volunteer,9876540006,VOL2024006,School of Engineering,Stage Management,Event Management
-Karthik Rao,karthik.vol@event.com,Volunteer@123,volunteer,9876540007,VOL2024007,School of Engineering,Crowd Control,Event Management
-Divya Iyer,divya.vol@event.com,Volunteer@123,volunteer,9876540008,VOL2024008,School of Engineering,First Aid,Event Management
-Rohan Gupta,rohan.vol@event.com,Volunteer@123,volunteer,9876540009,VOL2024009,School of Engineering,Catering,Event Management
-Meera Joshi,meera.vol@event.com,Volunteer@123,volunteer,9876540010,VOL2024010,School of Engineering,Photography,Event Management
+name,email,password,volunteerId,phone,faculty,department,programme,year,permissions,assignedEvents,shiftStart,shiftEnd,joinDate,notes
+Rajesh Kumar,rajesh.vol@event.com,Volunteer@123,VOL2024001,9876540001,School of Engineering,CSE,Event Management,3,"{""canScanQR"":true,""canManageAttendance"":true,""canViewReports"":false}","[""EVENT001""]",08:00:00,18:00:00,2024-01-15,Gate management volunteer
+Neha Sharma,neha.vol@event.com,Volunteer@123,VOL2024002,9876540002,School of Engineering,ECE,Event Management,2,"{""canScanQR"":true,""canManageAttendance"":false,""canViewReports"":false}","[""EVENT001""]",09:00:00,17:00:00,2024-01-15,Registration desk volunteer
+Arun Patel,,Volunteer@123,VOL2024003,9876540003,School of Engineering,MECH,Event Management,4,"{""canScanQR"":true,""canManageAttendance"":true,""canViewReports"":true}","[""EVENT001"",""EVENT002""]",07:00:00,19:00:00,2024-01-16,Senior volunteer - multiple events
+Sneha Reddy,sneha.red@event.com,Volunteer@123,VOL2024004,9876540004,School of Engineering,CIVIL,Event Management,3,,,10:00:00,16:00:00,2024-01-16,Part-time volunteer
+Vikram Singh,,Volunteer@123,VOL2024005,9876540005,School of Engineering,IT,Event Management,2,"{""canScanQR"":true,""canManageAttendance"":false,""canViewReports"":false}","[""EVENT001""]",12:00:00,20:00:00,2024-01-17,Evening shift volunteer
+Priya Nair,priya.nair@event.com,Volunteer@123,VOL2024006,9876540006,School of Engineering,EEE,Event Management,4,"{""canScanQR"":true,""canManageAttendance"":true,""canViewReports"":true}","[""EVENT002""]",08:00:00,18:00:00,2024-01-17,Event coordinator
+Karthik Rao,,Volunteer@123,VOL2024007,9876540007,School of Engineering,CSE,Event Management,3,"{""canScanQR"":true,""canManageAttendance"":false,""canViewReports"":false}",,14:00:00,22:00:00,2024-01-18,Night shift volunteer
+Divya Iyer,divya.iyer@event.com,Volunteer@123,VOL2024008,9876540008,School of Engineering,ECE,Event Management,2,,,09:00:00,17:00:00,2024-01-18,First aid volunteer
+Rohan Gupta,,Volunteer@123,VOL2024009,9876540009,School of Engineering,MECH,Event Management,4,"{""canScanQR"":true,""canManageAttendance"":true,""canViewReports"":false}","[""EVENT001"",""EVENT002""]",06:00:00,18:00:00,2024-01-19,Setup and teardown volunteer
+Meera Joshi,meera.joshi@event.com,Volunteer@123,VOL2024010,9876540010,School of Engineering,IT,Event Management,3,"{""canScanQR"":false,""canManageAttendance"":false,""canViewReports"":true}",,09:00:00,17:00:00,2024-01-19,Documentation volunteer

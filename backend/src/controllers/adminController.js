@@ -1,6 +1,7 @@
 const Event = require('../models/Event');
 const Stall = require('../models/Stall');
 const User = require('../models/User');
+const Volunteer = require('../models/Volunteer'); // Add Volunteer model
 const Attendance = require('../models/Attendance');
 const Feedback = require('../models/Feedback');
 const Vote = require('../models/Vote');
@@ -483,7 +484,7 @@ exports.deleteUser = async (req, res, next) => {
 };
 
 /**
- * BULK UPLOAD USERS
+ * BULK UPLOAD USERS (Students, Admins, Stall Owners)
  */
 exports.bulkUploadUsers = async (req, res, next) => {
   try {
@@ -507,46 +508,203 @@ exports.bulkUploadUsers = async (req, res, next) => {
         const plainPassword = row.password || 'changeme123';
         const userRole = row.role || 'student';
         
+        // Validate role-specific requirements
+        if (userRole === 'student') {
+          if (!row.regNo || row.regNo.trim() === '') {
+            throw new Error('Registration number (regNo) is required for students');
+          }
+        } else if (userRole === 'admin' || userRole === 'stall_owner') {
+          if (!row.email || row.email.trim() === '') {
+            throw new Error(`Email is required for ${userRole} role`);
+          }
+        }
+        
         const userData = {
           name: row.name,
-          email: row.email,
+          email: row.email || null, // Allow null for students
           password: plainPassword,
           role: userRole,
-          rollNo: row.rollNo,
+          regNo: row.regNo || null,
           programme: row.programme,
           department: row.department,
+          faculty: row.faculty,
+          year: row.year ? parseInt(row.year) : null,
           phone: row.phone,
-          assignedGate: row.assignedGate,
+          birthDate: row.birthDate || null,
+          permanentAddressPinCode: row.permanentAddressPinCode || null,
         };
         
         users.push(userData);
         
-        // Store plain password info for email
-        usersWithPlainPasswords.push({
-          email: row.email,
-          name: row.name,
-          password: plainPassword,
-          role: userRole,
-        });
+        // Store plain password info for email (only if email exists)
+        if (row.email && row.email.trim() !== '') {
+          usersWithPlainPasswords.push({
+            email: row.email,
+            name: row.name,
+            password: plainPassword,
+            role: userRole,
+          });
+        }
       } catch (error) {
         errors.push({ row: i + 2, error: error.message });
       }
     }
 
     if (users.length > 0) {
-      await User.insertMany(users);
+      await User.bulkCreate(users);
       
-      // Send bulk emails (non-blocking)
-      sendBulkCredentialsEmails(usersWithPlainPasswords).catch((err) => {
-        console.error('Bulk email sending failed:', err.message);
-      });
+      // Send bulk emails (non-blocking, only to users with emails)
+      if (usersWithPlainPasswords.length > 0) {
+        sendBulkCredentialsEmails(usersWithPlainPasswords).catch((err) => {
+          console.error('Bulk email sending failed:', err.message);
+        });
+      }
     }
 
     await fs.unlink(req.file.path);
 
+    const emailCount = usersWithPlainPasswords.length;
+    const totalUsers = users.length;
+
     res.status(201).json({
       success: true,
-      message: `${users.length} users uploaded successfully. Credentials sent to their emails.`,
+      message: `${totalUsers} users uploaded successfully. ${emailCount > 0 ? `Credentials sent to ${emailCount} email addresses.` : 'No email notifications sent (students without emails).'}`,
+      summary: {
+        totalUploaded: totalUsers,
+        emailsSent: emailCount,
+        studentsWithoutEmail: totalUsers - emailCount
+      },
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * BULK UPLOAD VOLUNTEERS
+ */
+exports.bulkUploadVolunteers = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV file is required',
+      });
+    }
+
+    const csvData = await fs.readFile(req.file.path, 'utf-8');
+    const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+
+    const volunteers = [];
+    const volunteersWithPlainPasswords = []; // For email sending
+    const errors = [];
+
+    for (let i = 0; i < parsed.data.length; i++) {
+      const row = parsed.data[i];
+      try {
+        const plainPassword = row.password || 'volunteer123';
+        
+        // Validate required fields
+        if (!row.volunteerId || row.volunteerId.trim() === '') {
+          throw new Error('Volunteer ID is required for volunteers');
+        }
+        
+        if (!row.name || row.name.trim() === '') {
+          throw new Error('Name is required for volunteers');
+        }
+        
+        // Parse permissions if provided
+        let permissions = {
+          canScanQR: true,
+          canManageAttendance: true,
+          canViewReports: false
+        };
+        
+        if (row.permissions) {
+          try {
+            permissions = { ...permissions, ...JSON.parse(row.permissions) };
+          } catch (err) {
+            // If JSON parsing fails, use default permissions
+            console.warn(`Invalid permissions JSON for volunteer ${row.volunteerId}, using defaults`);
+          }
+        }
+        
+        // Parse assigned events if provided
+        let assignedEvents = [];
+        if (row.assignedEvents) {
+          try {
+            assignedEvents = JSON.parse(row.assignedEvents);
+          } catch (err) {
+            // If JSON parsing fails, try comma-separated values
+            assignedEvents = row.assignedEvents.split(',').map(id => id.trim()).filter(id => id);
+          }
+        }
+        
+        const volunteerData = {
+          name: row.name,
+          email: row.email || null,
+          password: plainPassword,
+          phone: row.phone,
+          volunteerId: row.volunteerId,
+          faculty: row.faculty,
+          department: row.department,
+          programme: row.programme,
+          year: row.year ? parseInt(row.year) : null,
+          permissions: permissions,
+          assignedEvents: assignedEvents,
+          shiftStart: row.shiftStart || null,
+          shiftEnd: row.shiftEnd || null,
+          joinDate: row.joinDate || new Date().toISOString().split('T')[0],
+          notes: row.notes || null
+        };
+        
+        volunteers.push(volunteerData);
+        
+        // Store plain password info for email (only if email exists)
+        if (row.email && row.email.trim() !== '') {
+          volunteersWithPlainPasswords.push({
+            email: row.email,
+            name: row.name,
+            volunteerId: row.volunteerId,
+            password: plainPassword,
+            role: 'volunteer',
+          });
+        }
+      } catch (error) {
+        errors.push({ 
+          row: i + 2, 
+          volunteerId: row.volunteerId || 'unknown',
+          error: error.message 
+        });
+      }
+    }
+
+    if (volunteers.length > 0) {
+      await Volunteer.bulkCreate(volunteers);
+      
+      // Send bulk emails (non-blocking, only to volunteers with emails)
+      if (volunteersWithPlainPasswords.length > 0) {
+        sendBulkCredentialsEmails(volunteersWithPlainPasswords).catch((err) => {
+          console.error('Bulk volunteer email sending failed:', err.message);
+        });
+      }
+    }
+
+    // Clean up uploaded file
+    await fs.unlink(req.file.path);
+
+    const emailCount = volunteersWithPlainPasswords.length;
+    const totalVolunteers = volunteers.length;
+
+    res.status(201).json({
+      success: true,
+      message: `${totalVolunteers} volunteers uploaded successfully. ${emailCount > 0 ? `Credentials sent to ${emailCount} email addresses.` : 'No email notifications sent (volunteers without emails).'}`,
+      summary: {
+        totalUploaded: totalVolunteers,
+        emailsSent: emailCount,
+        volunteersWithoutEmail: totalVolunteers - emailCount
+      },
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

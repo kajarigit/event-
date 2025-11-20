@@ -1,9 +1,10 @@
-const { Event, Stall, User, Attendance, Feedback, Vote, ScanLog, sequelize } = require('../models/index.sequelize');
+const { Event, Stall, User, Volunteer, Attendance, Feedback, Vote, ScanLog, sequelize } = require('../models/index.sequelize');
 const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
 const { generateRandomPassword } = require('../utils/passwordGenerator');
 const { sendWelcomeEmail, sendStallQRCode, sendStallOwnerCredentials } = require('../utils/emailService');
 const { normalizeDepartment, normalizeString, normalizeEmail } = require('../utils/normalization');
+const volunteerCredentialsCache = require('../utils/volunteerCredentialsCache');
 const QRCode = require('qrcode');
 const Papa = require('papaparse');
 const fs = require('fs').promises;
@@ -253,13 +254,16 @@ exports.getStalls = async (req, res, next) => {
       count = result.count;
     }
 
+    // Convert stalls to admin JSON format (includes plain text passwords)
+    const adminStalls = stalls.map(stall => stall.toAdminJSON());
+
     res.status(200).json({
       success: true,
       count: stalls.length,
       total: count,
       page: parseInt(page),
       pages: Math.ceil(count / parseInt(limit)),
-      data: stalls,
+      data: adminStalls,
     });
   } catch (error) {
     console.error('Error fetching stalls:', error);
@@ -326,11 +330,8 @@ exports.createStall = async (req, res, next) => {
     // Generate a secure random password for stall owner dashboard
     const password = crypto.randomBytes(4).toString('hex'); // 8 character random password
     
-    // Hash the password before storing
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    // Store hashed password in stall
-    stall.ownerPassword = hashedPassword;
+    // Store plain password - Sequelize hooks will hash it automatically
+    stall.ownerPassword = password;
     await stall.save();
 
     // Generate QR token with actual stall ID
@@ -530,9 +531,6 @@ exports.bulkUploadStalls = async (req, res, next) => {
 
         // Generate password for stall owner dashboard access
         const ownerPassword = row.ownerPassword || crypto.randomBytes(4).toString('hex'); // 8 character random password
-        
-        // Hash the password before storing
-        const hashedPassword = await bcrypt.hash(ownerPassword, 10);
 
         const stallData = {
           eventId: row.eventId,
@@ -543,7 +541,7 @@ exports.bulkUploadStalls = async (req, res, next) => {
           ownerName: normalizeString(row.ownerName) || null,
           ownerContact: normalizeString(row.ownerContact) || null,
           ownerEmail: normalizeEmail(row.ownerEmail) || null,
-          ownerPassword: hashedPassword, // Store hashed password for stall owner login
+          ownerPassword: ownerPassword, // Store plain password - Sequelize hooks will hash it
           department: normalizeDepartment(row.department), // Normalize department
           participants: row.participants ? JSON.parse(row.participants) : [],
           isActive: row.isActive !== 'false',
@@ -791,35 +789,66 @@ exports.bulkUploadUsers = async (req, res, next) => {
     for (let i = 0; i < parsed.data.length; i++) {
       const row = parsed.data[i];
       try {
-        if (!row.name || !row.email) {
-          errors.push({ row: i + 1, error: 'Name and email are required' });
+        const role = row.role || 'student';
+        
+        // Validate that this is not a volunteer (volunteers have separate table now)
+        if (role === 'volunteer') {
+          errors.push({ row: i + 1, error: 'Volunteers must be uploaded using the volunteers bulk upload endpoint' });
           continue;
         }
-
-        // Generate random password if not provided in CSV
-        const password = row.password || generateRandomPassword(10);
         
-        // Store plain password for email
-        credentialsMap.set(row.email, {
-          email: normalizeEmail(row.email),
+        // Role-based validation
+        if (!row.name) {
+          errors.push({ row: i + 1, error: 'Name is required' });
+          continue;
+        }
+        
+        if (role === 'admin' || role === 'stall_owner') {
+          if (!row.email) {
+            errors.push({ row: i + 1, error: `Email is required for ${role}` });
+            continue;
+          }
+        } else if (role === 'student') {
+          if (!row.regNo && !row.uid) {
+            errors.push({ row: i + 1, error: 'Registration number (regNo or uid) is required for students' });
+            continue;
+          }
+        }
+
+        // Generate passwords
+        let password;
+        
+        if (role === 'student') {
+          password = 'student123';
+        } else {
+          password = row.password || generateRandomPassword(10);
+        }
+        
+        // Store credentials info
+        const credentialKey = row.email || row.regNo || row.uid;
+        credentialsMap.set(credentialKey, {
+          email: normalizeEmail(row.email) || null,
           name: normalizeString(row.name),
           password: password,
-          role: row.role || 'student',
-          regNo: normalizeString(row.regNo) || null,
+          role: role,
+          regNo: normalizeString(row.regNo || row.uid) || null,
+          uid: normalizeString(row.uid) || null,
         });
 
         usersToCreate.push({
           name: normalizeString(row.name),
-          email: normalizeEmail(row.email),
+          email: normalizeEmail(row.email) || null,
           password: password, // Will be hashed by model hook
-          role: row.role || 'student',
+          role: role,
           phone: normalizeString(row.phone) || null,
-          regNo: normalizeString(row.regNo) || null,
+          regNo: normalizeString(row.regNo || row.uid) || null,
           faculty: normalizeString(row.faculty) || null,
           department: normalizeDepartment(row.department), // Normalize department
           programme: normalizeString(row.programme) || null,
           year: row.year || null,
           isActive: row.isActive !== 'false',
+          birthDate: row.birthDate || null,
+          permanentAddressPinCode: row.permanentAddressPinCode || null,
         });
       } catch (error) {
         errors.push({ row: i + 1, error: error.message });
@@ -831,7 +860,7 @@ exports.bulkUploadUsers = async (req, res, next) => {
       individualHooks: true, // This will trigger password hashing
     });
 
-    // Send welcome emails to all created users
+    // Send welcome emails to created users (excluding students by default)
     const emailResults = {
       sent: 0,
       failed: 0,
@@ -839,8 +868,9 @@ exports.bulkUploadUsers = async (req, res, next) => {
     };
 
     for (const user of createdUsers) {
-      const credentials = credentialsMap.get(user.email);
-      if (credentials) {
+      const credentials = credentialsMap.get(user.email || user.regNo);
+      
+      if (credentials && user.role !== 'student' && user.email) {
         try {
           await sendWelcomeEmail(user, credentials.password, user.role);
           emailResults.sent++;
@@ -853,6 +883,8 @@ exports.bulkUploadUsers = async (req, res, next) => {
           });
           console.error(`❌ Failed to send email to ${user.email}:`, emailError.message);
         }
+      } else if (user.role === 'student') {
+        console.log(`📚 Student ${user.regNo} created with default password - no email sent`);
       }
     }
 
@@ -861,6 +893,164 @@ exports.bulkUploadUsers = async (req, res, next) => {
       message: `${createdUsers.length} users created successfully. ${emailResults.sent} welcome emails sent.`,
       data: {
         created: createdUsers.length,
+        emailsSent: emailResults.sent,
+        emailsFailed: emailResults.failed,
+        uploadErrors: errors,
+        emailErrors: emailResults.errors,
+      },
+    });
+  } catch (error) {
+    next(error);
+  } finally {
+    if (req.file) await fs.unlink(req.file.path).catch(() => {});
+  }
+};
+
+/**
+ * BULK UPLOAD VOLUNTEERS
+ */
+exports.bulkUploadVolunteers = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'CSV file is required',
+      });
+    }
+
+    const csvData = await fs.readFile(req.file.path, 'utf-8');
+    const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+
+    const volunteersToCreate = [];
+    const errors = [];
+    const credentialsMap = new Map(); // Store volunteerId -> password mapping
+
+    for (let i = 0; i < parsed.data.length; i++) {
+      const row = parsed.data[i];
+      try {
+        // Validate required fields
+        if (!row.name) {
+          errors.push({ row: i + 1, error: 'Name is required' });
+          continue;
+        }
+        
+        if (!row.volunteerId) {
+          errors.push({ row: i + 1, error: 'Volunteer ID is required for volunteers' });
+          continue;
+        }
+
+        // Generate password
+        const password = row.password || 'volunteer123';
+        
+        // Parse permissions if provided
+        let permissions = {
+          canScanQR: true,
+          canManageAttendance: true,
+          canViewReports: false
+        };
+        
+        if (row.permissions) {
+          try {
+            permissions = { ...permissions, ...JSON.parse(row.permissions) };
+          } catch (err) {
+            console.warn(`Invalid permissions JSON for volunteer ${row.volunteerId}, using defaults`);
+          }
+        }
+        
+        // Parse assigned events if provided
+        let assignedEvents = [];
+        if (row.assignedEvents) {
+          try {
+            assignedEvents = JSON.parse(row.assignedEvents);
+          } catch (err) {
+            // If JSON parsing fails, try comma-separated values
+            assignedEvents = row.assignedEvents.split(',').map(id => id.trim()).filter(id => id);
+          }
+        }
+        
+        // Store credentials info
+        credentialsMap.set(row.volunteerId, {
+          email: normalizeEmail(row.email) || null,
+          name: normalizeString(row.name),
+          password: password,
+          volunteerId: normalizeString(row.volunteerId),
+        });
+
+        volunteersToCreate.push({
+          name: normalizeString(row.name),
+          email: normalizeEmail(row.email) || null,
+          password: password, // Will be hashed by model hook
+          phone: normalizeString(row.phone) || null,
+          volunteerId: normalizeString(row.volunteerId),
+          faculty: normalizeString(row.faculty) || null,
+          department: normalizeDepartment(row.department) || null,
+          programme: normalizeString(row.programme) || null,
+          year: row.year ? parseInt(row.year) : null,
+          permissions: permissions,
+          assignedEvents: assignedEvents,
+          shiftStart: row.shiftStart || null,
+          shiftEnd: row.shiftEnd || null,
+          joinDate: row.joinDate || new Date().toISOString().split('T')[0],
+          notes: normalizeString(row.notes) || null,
+          isActive: row.isActive !== 'false',
+        });
+      } catch (error) {
+        errors.push({ row: i + 1, error: error.message });
+      }
+    }
+
+    const createdVolunteers = await Volunteer.bulkCreate(volunteersToCreate, {
+      validate: true,
+      individualHooks: true, // This will trigger password hashing
+    });
+
+    // Store volunteer credentials and send emails
+    const emailResults = {
+      sent: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    for (const volunteer of createdVolunteers) {
+      const credentials = credentialsMap.get(volunteer.volunteerId);
+      
+      // Store volunteer credentials in cache for download
+      if (credentials) {
+        volunteerCredentialsCache.storeVolunteerCredentials(volunteer.volunteerId, {
+          volunteerId: volunteer.volunteerId,
+          name: volunteer.name,
+          password: credentials.password,
+          department: volunteer.department,
+          phone: volunteer.phone,
+          email: volunteer.email
+        });
+        console.log(`👥 Volunteer ${volunteer.volunteerId} created - credentials stored for download`);
+      }
+
+      // Send welcome email if email is provided
+      if (volunteer.email && credentials) {
+        try {
+          await sendWelcomeEmail(volunteer, credentials.password, 'volunteer');
+          emailResults.sent++;
+          console.log(`✅ Welcome email sent to ${volunteer.email}`);
+        } catch (emailError) {
+          emailResults.failed++;
+          emailResults.errors.push({
+            email: volunteer.email,
+            error: emailError.message,
+          });
+          console.error(`❌ Failed to send email to ${volunteer.email}:`, emailError.message);
+        }
+      } else {
+        console.log(`👥 Volunteer ${volunteer.volunteerId} created without email - credentials available for download`);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${createdVolunteers.length} volunteers created successfully. ${emailResults.sent} welcome emails sent. Credentials available for download.`,
+      data: {
+        created: createdVolunteers.length,
         emailsSent: emailResults.sent,
         emailsFailed: emailResults.failed,
         uploadErrors: errors,
@@ -2143,6 +2333,649 @@ exports.exportComprehensiveAnalytics = async (req, res, next) => {
     console.log('[Analytics Export] Sheets:', workbook.worksheets.map(ws => ws.name).join(', '));
   } catch (error) {
     console.error('[Analytics Export] Error generating report:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Fix stall owner passwords by hashing plain text ones
+ * @route   POST /api/admin/stalls/fix-passwords
+ * @access  Private (Admin only)
+ */
+exports.fixStallPasswords = async (req, res, next) => {
+  try {
+    console.log('🔐 Starting stall password fix process...');
+    
+    // Get all stalls with passwords
+    const stalls = await Stall.findAll({
+      where: {
+        ownerPassword: {
+          [sequelize.Op.ne]: null // Not null
+        }
+      },
+      attributes: ['id', 'name', 'ownerEmail', 'ownerPassword']
+    });
+
+    console.log(`📊 Found ${stalls.length} stalls with passwords`);
+    
+    if (stalls.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No stalls found with passwords to fix',
+        data: { processed: 0, fixed: 0, alreadyHashed: 0, errors: 0 }
+      });
+    }
+
+    let plainTextCount = 0;
+    let alreadyHashedCount = 0;
+    let fixedCount = 0;
+    let errorCount = 0;
+    const results = [];
+
+    console.log('🔍 Analyzing passwords...');
+
+    for (const stall of stalls) {
+      try {
+        const isAlreadyHashed = stall.ownerPassword.startsWith('$2');
+        
+        if (isAlreadyHashed) {
+          alreadyHashedCount++;
+          results.push({
+            stallName: stall.name,
+            email: stall.ownerEmail,
+            status: 'already_hashed'
+          });
+          console.log(`✅ ${stall.name}: Already hashed`);
+        } else {
+          plainTextCount++;
+          const originalPassword = stall.ownerPassword;
+          
+          // Hash the plain text password
+          const hashedPassword = await bcrypt.hash(stall.ownerPassword, 10);
+          
+          // Update the stall with hashed password (skip hooks to avoid double hashing)
+          await sequelize.query(
+            'UPDATE stalls SET "ownerPassword" = :hashedPassword WHERE id = :stallId',
+            {
+              replacements: { hashedPassword, stallId: stall.id },
+              type: sequelize.QueryTypes.UPDATE
+            }
+          );
+          
+          fixedCount++;
+          results.push({
+            stallName: stall.name,
+            email: stall.ownerEmail,
+            originalPassword: originalPassword, // Include for reference
+            status: 'fixed'
+          });
+          console.log(`🔧 ${stall.name}: Fixed password "${originalPassword}"`);
+        }
+      } catch (error) {
+        errorCount++;
+        results.push({
+          stallName: stall.name,
+          email: stall.ownerEmail,
+          status: 'error',
+          error: error.message
+        });
+        console.error(`❌ Error fixing ${stall.name}: ${error.message}`);
+      }
+    }
+
+    // Summary
+    const summary = {
+      totalProcessed: stalls.length,
+      alreadyHashed: alreadyHashedCount,
+      plainTextFound: plainTextCount,
+      successfullyFixed: fixedCount,
+      errors: errorCount
+    };
+
+    console.log('📋 Password Fix Summary:', summary);
+
+    res.json({
+      success: true,
+      message: `Password fix completed. ${fixedCount} passwords were hashed.`,
+      data: {
+        summary,
+        results
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Password fix failed:', error.message);
+    next(error);
+  }
+};
+
+// ========================================
+// Volunteer CRUD Operations
+// ========================================
+
+/**
+ * @desc    Get all volunteers
+ * @route   GET /api/admin/volunteers
+ * @access  Private (Admin only)
+ */
+exports.getVolunteers = async (req, res, next) => {
+  try {
+    const { Volunteer } = require('../models');
+    
+    const volunteers = await Volunteer.findAll({
+      where: {
+        isActive: true
+      },
+      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'email', 'permissions', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      message: `Found ${volunteers.length} volunteers`,
+      data: {
+        volunteers: volunteers,
+        count: volunteers.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching volunteers:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create a new volunteer
+ * @route   POST /api/admin/volunteers
+ * @access  Private (Admin only)
+ */
+exports.createVolunteer = async (req, res, next) => {
+  try {
+    const { Volunteer } = require('../models');
+    const { name, volunteerId, department, phone, email, permissions } = req.body;
+
+    // Validate required fields
+    if (!name || !volunteerId || !department) {
+      return res.status(400).json({
+        success: false,
+        message: 'Name, volunteerId, and department are required'
+      });
+    }
+
+    // Check if volunteerId already exists
+    const existingVolunteer = await Volunteer.findOne({
+      where: { volunteerId }
+    });
+
+    if (existingVolunteer) {
+      return res.status(400).json({
+        success: false,
+        message: 'Volunteer ID already exists'
+      });
+    }
+
+    // Create volunteer
+    const volunteer = await Volunteer.create({
+      name,
+      volunteerId,
+      department,
+      phone,
+      email,
+      permissions: permissions || 'basic',
+      password: 'volunteer123', // Default password
+      isActive: true
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Volunteer created successfully',
+      data: {
+        volunteer: {
+          id: volunteer.id,
+          name: volunteer.name,
+          volunteerId: volunteer.volunteerId,
+          department: volunteer.department,
+          phone: volunteer.phone,
+          email: volunteer.email,
+          permissions: volunteer.permissions,
+          createdAt: volunteer.createdAt
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error creating volunteer:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get single volunteer by ID
+ * @route   GET /api/admin/volunteers/:id
+ * @access  Private (Admin only)
+ */
+exports.getVolunteer = async (req, res, next) => {
+  try {
+    const { Volunteer } = require('../models');
+    const { id } = req.params;
+
+    const volunteer = await Volunteer.findOne({
+      where: { 
+        id,
+        isActive: true
+      },
+      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'email', 'permissions', 'createdAt']
+    });
+
+    if (!volunteer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Volunteer not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Volunteer found',
+      data: {
+        volunteer
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching volunteer:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Update volunteer
+ * @route   PUT /api/admin/volunteers/:id
+ * @access  Private (Admin only)
+ */
+exports.updateVolunteer = async (req, res, next) => {
+  try {
+    const { Volunteer } = require('../models');
+    const { id } = req.params;
+    const { name, department, phone, email, permissions } = req.body;
+
+    const volunteer = await Volunteer.findOne({
+      where: { 
+        id,
+        isActive: true
+      }
+    });
+
+    if (!volunteer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Volunteer not found'
+      });
+    }
+
+    // Update volunteer
+    await volunteer.update({
+      name: name || volunteer.name,
+      department: department || volunteer.department,
+      phone: phone || volunteer.phone,
+      email: email || volunteer.email,
+      permissions: permissions || volunteer.permissions
+    });
+
+    res.json({
+      success: true,
+      message: 'Volunteer updated successfully',
+      data: {
+        volunteer: {
+          id: volunteer.id,
+          name: volunteer.name,
+          volunteerId: volunteer.volunteerId,
+          department: volunteer.department,
+          phone: volunteer.phone,
+          email: volunteer.email,
+          permissions: volunteer.permissions,
+          updatedAt: volunteer.updatedAt
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating volunteer:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete volunteer (soft delete)
+ * @route   DELETE /api/admin/volunteers/:id
+ * @access  Private (Admin only)
+ */
+exports.deleteVolunteer = async (req, res, next) => {
+  try {
+    const { Volunteer } = require('../models');
+    const { id } = req.params;
+
+    const volunteer = await Volunteer.findOne({
+      where: { 
+        id,
+        isActive: true
+      }
+    });
+
+    if (!volunteer) {
+      return res.status(404).json({
+        success: false,
+        message: 'Volunteer not found'
+      });
+    }
+
+    // Soft delete
+    await volunteer.update({
+      isActive: false
+    });
+
+    res.json({
+      success: true,
+      message: 'Volunteer deleted successfully'
+    });
+
+  } catch (error) {
+    console.error('❌ Error deleting volunteer:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get volunteer scan analytics
+ * @route   GET /api/admin/volunteers/scan-analytics
+ * @access  Private (Admin only)
+ */
+exports.getVolunteerScanAnalytics = async (req, res, next) => {
+  try {
+    const { Volunteer, User, Event, ScanLog } = require('../models');
+    const { Op } = require('sequelize');
+    const { eventId, volunteerId, startDate, endDate } = req.query;
+
+    // Build where clause for scan logs
+    let scanWhere = {
+      scannedByType: 'volunteer' // Only get scans performed by volunteers
+    };
+    if (eventId) scanWhere.eventId = eventId;
+    if (startDate) {
+      const start = new Date(startDate);
+      const end = endDate ? new Date(endDate) : new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      scanWhere.createdAt = { [Op.between]: [start, end] };
+    }
+
+    // Get all volunteers
+    const volunteers = await Volunteer.findAll({
+      where: volunteerId ? { id: volunteerId } : { isActive: true },
+      attributes: ['id', 'name', 'volunteerId', 'department', 'permissions']
+    });
+
+    // Get scan logs with volunteer filter
+    const scanLogs = await ScanLog.findAll({
+      where: {
+        ...scanWhere,
+        ...(volunteerId && { scannedBy: volunteerId })
+      },
+      include: [
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name']
+        },
+        {
+          model: User,
+          as: 'student',
+          attributes: ['id', 'name', 'regNo']
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Group scan logs by volunteer
+    const scansByVolunteer = {};
+    scanLogs.forEach(scan => {
+      const scannerId = scan.scannedBy;
+      if (!scansByVolunteer[scannerId]) {
+        scansByVolunteer[scannerId] = [];
+      }
+      scansByVolunteer[scannerId].push(scan);
+    });
+
+    // Process volunteer statistics
+    const volunteerStats = volunteers.map(volunteer => {
+      const scans = scansByVolunteer[volunteer.id] || [];
+      const scanCount = scans.length;
+      
+      // Get current event (most recent scan's event)
+      const recentScan = scans[0]; // Already sorted by createdAt DESC
+      const currentEvent = recentScan?.event?.name || null;
+      
+      // Calculate last scan time
+      const lastScanTime = recentScan ? recentScan.createdAt : null;
+      
+      // Determine online status (scanned within last 30 minutes)
+      const isOnline = lastScanTime && 
+        new Date() - new Date(lastScanTime) < 30 * 60 * 1000;
+
+      return {
+        volunteerId: volunteer.volunteerId,
+        volunteerName: volunteer.name,
+        department: volunteer.department,
+        permissions: volunteer.permissions,
+        scanCount,
+        currentEvent,
+        lastScanTime,
+        isOnline,
+        scans: scans.slice(0, 10).map(scan => ({
+          id: scan.id,
+          studentName: scan.student?.name,
+          studentRegNo: scan.student?.regNo,
+          eventName: scan.event?.name,
+          timestamp: scan.createdAt
+        }))
+      };
+    });
+
+    // Calculate summary statistics
+    const activeVolunteers = volunteerStats.filter(v => 
+      v.lastScanTime && new Date() - new Date(v.lastScanTime) < 24 * 60 * 60 * 1000
+    ).length;
+    
+    const totalScans = volunteerStats.reduce((sum, v) => sum + v.scanCount, 0);
+    
+    const eventsCovered = new Set(
+      scanLogs.filter(scan => scan.event?.name).map(scan => scan.event.name)
+    ).size;
+    
+    const averageScansPerVolunteer = volunteers.length > 0 
+      ? Math.round(totalScans / volunteers.length) 
+      : 0;
+
+    // Get recent activity with volunteer names
+    const recentActivity = await ScanLog.findAll({
+      where: scanWhere,
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['name', 'regNo']
+        },
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['name']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: 20
+    });
+
+    // Get volunteer names for recent activity
+    const volunteerIds = [...new Set(recentActivity.map(scan => scan.scannedBy).filter(Boolean))];
+    const volunteerMap = {};
+    if (volunteerIds.length > 0) {
+      const activityVolunteers = await Volunteer.findAll({
+        where: { id: { [Op.in]: volunteerIds } },
+        attributes: ['id', 'name', 'volunteerId']
+      });
+      activityVolunteers.forEach(v => {
+        volunteerMap[v.id] = { name: v.name, volunteerId: v.volunteerId };
+      });
+    }
+
+    const formattedRecentActivity = recentActivity.map(scan => ({
+      volunteerName: volunteerMap[scan.scannedBy]?.name || 'Unknown Volunteer',
+      volunteerId: volunteerMap[scan.scannedBy]?.volunteerId || 'Unknown',
+      studentName: scan.student?.name,
+      studentRegNo: scan.student?.regNo,
+      eventName: scan.event?.name,
+      timestamp: scan.createdAt,
+      type: 'student'
+    }));
+
+    res.json({
+      success: true,
+      message: 'Volunteer scan analytics retrieved successfully',
+      data: {
+        summary: {
+          activeVolunteers,
+          totalScans,
+          eventsCovered,
+          averageScansPerVolunteer
+        },
+        volunteerStats: volunteerStats.sort((a, b) => b.scanCount - a.scanCount),
+        recentActivity: formattedRecentActivity
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching volunteer scan analytics:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Download volunteer credentials list
+ * @route   GET /api/admin/volunteers/download-credentials
+ * @access  Private (Admin only)
+ */
+exports.downloadVolunteerCredentials = async (req, res, next) => {
+  try {
+    // Get cached volunteer credentials (recently created ones with passwords)
+    const cachedCredentials = volunteerCredentialsCache.getAllVolunteerCredentials();
+    
+    // Also get all existing volunteers from database
+    const existingVolunteers = await User.findAll({
+      where: { 
+        role: 'volunteer',
+        isActive: true
+      },
+      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Combine cached credentials with existing volunteers
+    const volunteerList = [];
+    
+    // Add recently created volunteers with passwords from cache
+    cachedCredentials.forEach(cached => {
+      volunteerList.push({
+        name: cached.name,
+        volunteerId: cached.volunteerId,
+        password: cached.password,
+        department: cached.department || 'N/A',
+        phone: cached.phone || 'N/A',
+        uid: cached.uid || 'N/A',
+        source: 'Recently Created (with password)'
+      });
+    });
+    
+    // Add existing volunteers (passwords not available)
+    existingVolunteers.forEach(volunteer => {
+      // Only add if not already in cached list
+      if (!cachedCredentials.find(c => c.volunteerId === volunteer.volunteerId)) {
+        volunteerList.push({
+          name: volunteer.name,
+          volunteerId: volunteer.volunteerId,
+          password: 'Password not available (use reset)',
+          department: volunteer.department || 'N/A',
+          phone: volunteer.phone || 'N/A',
+          uid: 'N/A',
+          source: 'Existing Volunteer'
+        });
+      }
+    });
+
+    if (volunteerList.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No volunteers found'
+      });
+    }
+
+    // Create CSV content
+    const csvHeaders = ['Name', 'Volunteer ID', 'Password', 'UID', 'Department', 'Phone', 'Source'];
+    const csvRows = volunteerList.map(vol => [
+      vol.name,
+      vol.volunteerId,
+      vol.password,
+      vol.uid,
+      vol.department,
+      vol.phone,
+      vol.source
+    ]);
+
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    // Set headers for file download
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="volunteer-credentials-${new Date().toISOString().split('T')[0]}.csv"`);
+
+    res.status(200).send(csvContent);
+
+  } catch (error) {
+    console.error('❌ Error downloading volunteer credentials:', error.message);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get volunteer credentials for admin viewing
+ * @route   GET /api/admin/volunteers/credentials
+ * @access  Private (Admin only)
+ */
+exports.getVolunteerCredentials = async (req, res, next) => {
+  try {
+    const volunteers = await User.findAll({
+      where: { 
+        role: 'volunteer',
+        isActive: true
+      },
+      attributes: ['id', 'name', 'volunteerId', 'department', 'phone', 'email', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      message: `Found ${volunteers.length} volunteers`,
+      data: {
+        volunteers: volunteers.map(vol => ({
+          ...vol.toJSON(),
+          passwordNote: 'Passwords are securely hashed - use password reset if needed'
+        })),
+        totalCount: volunteers.length
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Error fetching volunteer credentials:', error.message);
     next(error);
   }
 };

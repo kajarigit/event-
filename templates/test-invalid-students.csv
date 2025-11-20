@@ -1,0 +1,3 @@
+name,email,password,role,phone,regNo,faculty,department,programme,year,birthDate,permanentAddressPinCode
+Test Student 1,,Student@123,student,9876543220,MISSING_REG,School of Engineering,Computer Science,B.Tech Computer Science,2024,2003-05-15,560001
+Test Student 2,test2@student.com,Student@123,student,9876543221,,School of Engineering,Electronics,B.Tech Electronics,2024,2003-08-22,560002

@@ -1,0 +1,3 @@
+name,email,password,volunteerId,phone,faculty,department,programme,year,permissions,assignedEvents,shiftStart,shiftEnd,joinDate,notes
+Test Volunteer 1,test1@volunteer.com,volunteer123,,9876543230,School of Engineering,Event Management,Administrative,2024,basic,Tech Fest 2024,09:00,17:00,2024-01-15,Missing volunteerId
+Test Volunteer 2,,volunteer123,TEST_VOL_002,9876543231,School of Engineering,Registration,Administrative,2024,advanced,Sports Day 2024,08:00,16:00,2024-02-01,Has volunteerId

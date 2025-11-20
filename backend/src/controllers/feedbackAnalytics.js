@@ -73,7 +73,7 @@ exports.getTopFeedbackGivers = async (req, res) => {
     const studentIds = feedbackData.map(item => item.studentId);
     const students = await User.findAll({
       where: { id: studentIds },
-      attributes: ['id', 'name', 'regNo', 'email', 'department', 'faculty', 'programme', 'year', 'phone']
+      attributes: ['id', 'name', 'regNo', 'department', 'faculty', 'programme', 'year', 'phone']
     });
 
     console.log(`[Top Feedback Givers] Found ${students.length} student details`);
@@ -85,7 +85,6 @@ exports.getTopFeedbackGivers = async (req, res) => {
         id: student.id,
         name: student.name,
         regNo: student.regNo,
-        email: student.email,
         department: student.department,
         faculty: student.faculty,
         programme: student.programme,

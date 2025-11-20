@@ -137,7 +137,7 @@ export const adminApi = {
     }),
   refreshStallStats: () => api.post('/admin/stalls/refresh-stats'),
 
-  // Users
+  // Users (Students/Admins only)
   getUsers: (params) => api.get('/admin/users', { params }),
   createUser: (data) => api.post('/admin/users', data),
   updateUser: (id, data) => api.put(`/admin/users/${id}`, data),
@@ -146,6 +146,22 @@ export const adminApi = {
     api.post('/admin/users/bulk', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+
+  // Volunteers (Separate table)
+  getVolunteers: (params) => api.get('/admin/volunteers', { params }),
+  createVolunteer: (data) => api.post('/admin/volunteers', data),
+  getVolunteer: (id) => api.get(`/admin/volunteers/${id}`),
+  updateVolunteer: (id, data) => api.put(`/admin/volunteers/${id}`, data),
+  deleteVolunteer: (id) => api.delete(`/admin/volunteers/${id}`),
+  bulkUploadVolunteers: (formData) =>
+    api.post('/admin/volunteers/bulk', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getVolunteerCredentials: () => api.get('/admin/volunteers/credentials'),
+  downloadVolunteerCredentials: () => api.get('/admin/volunteers/download-credentials', {
+    responseType: 'blob'
+  }),
+  getVolunteerScanAnalytics: (params) => api.get('/admin/volunteers/scan-analytics', { params }),
 
   // Analytics - Legacy
   getDetailedAttendance: (params) => api.get('/admin/analytics/detailed-attendance', { params }),

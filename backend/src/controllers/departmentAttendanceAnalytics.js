@@ -195,14 +195,12 @@ const departmentAttendanceAnalytics = {
           id: student.id,
           name: student.name,
           regNo: student.regNo,
-          email: student.email,
           status: 'Present'
         })),
         absentStudents: absentStudents.map(student => ({
           id: student.id,
           name: student.name,
           regNo: student.regNo,
-          email: student.email,
           status: 'Absent'
         }))
       };

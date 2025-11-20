@@ -228,7 +228,7 @@ Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,Sch
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Users Management</h2>
-          <p className="text-gray-600 mt-1">Manage students, volunteers, and admins</p>
+          <p className="text-gray-600 mt-1">Manage students and administrators</p>
         </div>
         <div className="flex space-x-3">
           <input
@@ -281,7 +281,6 @@ Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,Sch
             >
               <option value="">All Roles</option>
               <option value="student">Students</option>
-              <option value="volunteer">Volunteers</option>
               <option value="admin">Admins</option>
             </select>
           </div>
@@ -336,7 +335,6 @@ Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,Sch
                     <td className="px-6 py-4">
                       <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                         user.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                        user.role === 'volunteer' ? 'bg-green-100 text-green-800' :
                         'bg-blue-100 text-blue-800'
                       }`}>
                         {user.role.toUpperCase()}
@@ -431,7 +429,6 @@ Sneha Reddy,sneha.reddy@student.com,Student@123,student,9876543213,2024CE015,Sch
                     required
                   >
                     <option value="student">Student</option>
-                    <option value="volunteer">Volunteer</option>
                     <option value="admin">Admin</option>
                   </select>
                 </div>

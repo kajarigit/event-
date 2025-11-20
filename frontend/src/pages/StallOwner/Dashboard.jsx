@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { stallOwnerApi } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { 
   Store, TrendingUp, TrendingDown, Trophy, Star, MessageSquare, 
   ThumbsUp, QrCode, Users, Award, Clock, ArrowUp, ArrowDown,
-  Minus, BarChart3, Activity, LogOut, RefreshCw
+  Minus, BarChart3, Activity, LogOut, RefreshCw, Zap
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
@@ -14,210 +14,31 @@ const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
 
 export default function StallOwnerDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [stallData, setStallData] = useState(null);
-  const [previousRank, setPreviousRank] = useState(null);
-  const [previousLeaderboard, setPreviousLeaderboard] = useState([]);
   const [showQR, setShowQR] = useState(false);
-  const [rankChanges, setRankChanges] = useState({}); // Track position changes for each stall
-  const [liveUpdatesEnabled, setLiveUpdatesEnabled] = useState(true); // User can toggle live updates
+  const [autoRefresh, setAutoRefresh] = useState(true);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   
-  // Refs to track previous counts for notifications (to avoid stale closures)
+  // Notification tracking refs
   const prevVoteCountRef = useRef(0);
   const prevFeedbackCountRef = useRef(0);
+  const prevRankRef = useRef(null);
 
   useEffect(() => {
     const stored = localStorage.getItem('stallData');
-    if (stored) {
+    const token = localStorage.getItem('accessToken');
+    
+    console.log('Dashboard loading - checking auth:', { stored: !!stored, token: !!token });
+    
+    if (stored && token) {
       setStallData(JSON.parse(stored));
     } else {
+      console.log('Missing auth data, redirecting to login');
+      toast.error('Please login to access the dashboard');
       navigate('/stall-owner/login');
     }
   }, [navigate]);
-
-  // Fetch my stall details with QR code (refresh every 2 minutes or when manually refreshed)
-  const { data: myStall, isLoading: loadingStall, refetch: refetchMyStall } = useQuery({
-    queryKey: ['myStall'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getMyStall();
-      setLastUpdated(new Date());
-      return response.data.data.stall;
-    },
-    refetchInterval: liveUpdatesEnabled ? 120000 : false, // Refresh every 2 minutes if live updates enabled
-    enabled: !!stallData,
-  });
-
-  // Smart polling strategy: Fast initial updates, then slow down if no changes
-  const [pollingInterval, setPollingInterval] = useState(10000); // Start with 10 seconds
-  const dataChangeDetected = useRef(false);
-  
-  // Reset activity detection after 2 minutes of no changes
-  useEffect(() => {
-    if (dataChangeDetected.current) {
-      const resetTimer = setTimeout(() => {
-        dataChangeDetected.current = false;
-      }, 120000); // 2 minutes
-      return () => clearTimeout(resetTimer);
-    }
-  }, [dataChangeDetected.current]);
-
-  // Fetch department leaderboard (smart polling - adjusts based on activity)
-  const { data: leaderboard, isLoading: loadingLeaderboard, refetch: refetchLeaderboard } = useQuery({
-    queryKey: ['departmentLeaderboard'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getDepartmentLeaderboard();
-      setLastUpdated(new Date());
-      return response.data.data;
-    },
-    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling interval
-    enabled: !!stallData,
-    onSuccess: (data) => {
-      // Detect if data actually changed
-      const hasChanges = previousRank !== null && previousRank !== data.myPosition;
-      
-      if (hasChanges) {
-        dataChangeDetected.current = true;
-        // Reset to faster polling when changes detected
-        setPollingInterval(10000); // 10 seconds
-        
-        // Track rank changes for my stall
-        if (data.myPosition < previousRank) {
-          toast.success(`📈 You moved up to rank #${data.myPosition}!`, { duration: 5000, icon: '🎉' });
-        } else {
-          toast.error(`📉 You dropped to rank #${data.myPosition}`, { duration: 5000, icon: '⚠️' });
-        }
-      } else if (!dataChangeDetected.current) {
-        // Gradually slow down polling if no changes
-        setPollingInterval(prev => Math.min(prev * 1.2, 60000)); // Max 1 minute
-      }
-      
-      setPreviousRank(data.myPosition);
-      setLastUpdated(new Date());
-
-      // Track position changes for all stalls in leaderboard
-      if (previousLeaderboard.length > 0 && data.leaderboard) {
-        const changes = {};
-        data.leaderboard.forEach((stall) => {
-          const prevStall = previousLeaderboard.find(s => s.id === stall.id);
-          if (prevStall) {
-            const positionChange = prevStall.rank - stall.rank; // Positive = moved up, Negative = moved down
-            if (positionChange !== 0) {
-              changes[stall.id] = positionChange;
-            }
-          }
-        });
-        setRankChanges(changes);
-
-        // Clear rank change indicators after 10 seconds
-        if (Object.keys(changes).length > 0) {
-          setTimeout(() => {
-            setRankChanges({});
-          }, 10000);
-        }
-      }
-
-      // Store current leaderboard for next comparison
-      if (data.leaderboard) {
-        setPreviousLeaderboard(data.leaderboard);
-      }
-    },
-  });
-
-  // Fetch competition stats (refresh every 1 minute when live updates enabled)
-  const { data: competitionStats, refetch: refetchCompetitionStats } = useQuery({
-    queryKey: ['competitionStats'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getCompetitionStats();
-      setLastUpdated(new Date());
-      return response.data.data;
-    },
-    refetchInterval: liveUpdatesEnabled ? 60000 : false, // Refresh every 1 minute if live updates enabled
-    enabled: !!stallData,
-  });
-
-  // Fetch live votes (smart polling based on activity)
-  const { data: liveVotes, refetch: refetchVotes } = useQuery({
-    queryKey: ['liveVotes'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getLiveVotes({ limit: 20 });
-      setLastUpdated(new Date());
-      return response.data.data;
-    },
-    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling
-    enabled: !!stallData,
-    onSuccess: (data) => {
-      // Show notification for new votes using ref to avoid stale closure
-      const currentCount = data.totalVotes || 0;
-      if (prevVoteCountRef.current > 0 && currentCount > prevVoteCountRef.current) {
-        const newVotesCount = currentCount - prevVoteCountRef.current;
-        dataChangeDetected.current = true;
-        setPollingInterval(10000); // Speed up polling when activity detected
-        toast.success(`🎉 ${newVotesCount} new vote${newVotesCount > 1 ? 's' : ''}!`, {
-          duration: 3000,
-          icon: '🗳️',
-        });
-      }
-      prevVoteCountRef.current = currentCount;
-    },
-  });
-
-  // Fetch live feedbacks (smart polling based on activity)
-  const { data: liveFeedbacks, refetch: refetchFeedbacks } = useQuery({
-    queryKey: ['liveFeedbacks'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getLiveFeedbacks({ limit: 20 });
-      setLastUpdated(new Date());
-      return response.data.data;
-    },
-    refetchInterval: liveUpdatesEnabled ? pollingInterval : false, // Dynamic polling
-    enabled: !!stallData,
-    onSuccess: (data) => {
-      // Show notification for new feedbacks using ref to avoid stale closure
-      const currentCount = data.stats?.totalFeedbacks || data.totalFeedbacks || 0;
-      if (prevFeedbackCountRef.current > 0 && currentCount > prevFeedbackCountRef.current) {
-        const newFeedbacksCount = currentCount - prevFeedbackCountRef.current;
-        dataChangeDetected.current = true;
-        setPollingInterval(10000); // Speed up polling when activity detected
-        toast.success(`💬 ${newFeedbacksCount} new feedback${newFeedbacksCount > 1 ? 's' : ''}!`, {
-          duration: 3000,
-          icon: '⭐',
-        });
-      }
-      prevFeedbackCountRef.current = currentCount;
-    },
-  });
-
-  // Fetch recent activity (refresh every 1 minute when live updates enabled)
-  const { data: recentActivity, refetch: refetchRecentActivity } = useQuery({
-    queryKey: ['recentActivity'],
-    queryFn: async () => {
-      const response = await stallOwnerApi.getRecentActivity({ limit: 15 });
-      setLastUpdated(new Date());
-      return response.data.data;
-    },
-    refetchInterval: liveUpdatesEnabled ? 60000 : false, // Refresh every 1 minute if live updates enabled
-    enabled: !!stallData,
-  });
-
-  // Manual refresh function
-  const handleManualRefresh = async () => {
-    setLastUpdated(new Date());
-    toast.promise(
-      Promise.all([
-        refetchMyStall(),
-        refetchLeaderboard(),
-        refetchCompetitionStats(),
-        refetchVotes(),
-        refetchFeedbacks(),
-        refetchRecentActivity()
-      ]),
-      {
-        loading: 'Refreshing dashboard data...',
-        success: '✅ Dashboard updated successfully!',
-        error: '❌ Failed to refresh data'
-      }
-    );
-  };
 
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
@@ -228,47 +49,233 @@ export default function StallOwnerDashboard() {
     navigate('/stall-owner/login');
   };
 
-  const getRankIcon = (currentRank, stallId) => {
-    const change = rankChanges[stallId];
-    if (change > 0) return <ArrowUp className="text-green-500 animate-bounce" size={24} />;
-    if (change < 0) return <ArrowDown className="text-red-500 animate-bounce" size={24} />;
-    if (!previousRank || currentRank === previousRank) return <Minus className="text-gray-400" size={24} />;
-    if (currentRank < previousRank) return <ArrowUp className="text-green-500" size={24} />;
-    return <ArrowDown className="text-red-500" size={24} />;
-  };
-
-  const getPositionChangeText = (stallId) => {
-    const change = rankChanges[stallId];
-    if (!change) return null;
-    if (change > 0) return `+${change}`;
-    return change.toString();
-  };
-
-  const getPositionChangeBadge = (stallId) => {
-    const change = rankChanges[stallId];
-    if (!change) return null;
-    
-    if (change > 0) {
-      return (
-        <span className="ml-2 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-xs font-bold rounded-full animate-pulse">
-          ↑ {change}
-        </span>
-      );
-    } else if (change < 0) {
-      return (
-        <span className="ml-2 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300 text-xs font-bold rounded-full animate-pulse">
-          ↓ {Math.abs(change)}
-        </span>
-      );
+  // Optimized data fetching with proper caching and error handling
+  const { data: myStall, isLoading: loadingStall, error: stallError, refetch: refetchMyStall } = useQuery({
+    queryKey: ['stallOwner', 'myStall'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getMyStall();
+        setLastUpdated(new Date());
+        return response.data.data.stall;
+      } catch (error) {
+        console.error('Failed to fetch stall data:', error);
+        
+        // Handle authentication errors - but don't logout immediately, let user try manual refresh first
+        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+          console.log('Authentication error in stall data fetch:', error);
+          toast.error('Authentication failed. Please try refreshing or login again.');
+          // Don't auto-logout immediately - let user try manual refresh first
+        }
+        throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds only if auto-refresh is enabled
+    staleTime: 15000, // Consider data fresh for 15 seconds
+    cacheTime: 300000, // Keep in cache for 5 minutes
+    enabled: !!stallData,
+    retry: 1, // Reduce retries for auth errors
+    onError: (error) => {
+      // Don't show generic error toast if it's an auth error (already handled above)
+      if (error.response?.status !== 401 && !error.message?.includes('Session expired')) {
+        toast.error('Failed to load stall data');
+      }
     }
-    return null;
+  });
+
+  const { data: leaderboard, isLoading: loadingLeaderboard, error: leaderboardError, refetch: refetchLeaderboard } = useQuery({
+    queryKey: ['stallOwner', 'leaderboard'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getDepartmentLeaderboard();
+        setLastUpdated(new Date());
+        return response.data.data;
+      } catch (error) {
+        console.error('Failed to fetch leaderboard:', error);
+        
+        // Handle authentication errors - log but don't auto-logout immediately
+        if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+          console.log('Authentication error in leaderboard fetch:', error);
+          // Don't auto-logout immediately - let user try manual refresh first
+        }
+        throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 45000 : false, // 45 seconds
+    staleTime: 20000, // Consider fresh for 20 seconds
+    cacheTime: 300000, // Keep in cache for 5 minutes
+    enabled: !!stallData,
+    retry: 1, // Reduce retries for auth errors
+    onSuccess: (data) => {
+      // Smart notifications for rank changes
+      if (prevRankRef.current !== null && data.myPosition !== prevRankRef.current) {
+        if (data.myPosition < prevRankRef.current) {
+          toast.success(`🎉 Moved up to rank #${data.myPosition}!`, { duration: 4000, icon: '📈' });
+        } else {
+          toast(`📉 Now rank #${data.myPosition}`, { duration: 3000, icon: '📊' });
+        }
+      }
+      prevRankRef.current = data.myPosition;
+    },
+    onError: (error) => {
+      // Don't show generic error toast if it's an auth error
+      if (error.response?.status !== 401 && !error.message?.includes('Session expired')) {
+        toast.error('Failed to load leaderboard');
+      }
+    }
+  });
+
+  // Helper function to handle auth errors consistently - but don't auto-logout immediately
+  const handleAuthError = (error) => {
+    if (error.response?.status === 401 || error.message?.includes('Session expired')) {
+      console.log('Authentication error detected:', error);
+      // Don't auto-logout immediately - let user see the error and try manual refresh
+      return true; // Indicates auth error was detected
+    }
+    return false;
   };
 
-  const getRankColor = (rank) => {
-    if (rank === 1) return 'text-yellow-600 dark:text-yellow-400';
-    if (rank === 2) return 'text-gray-600 dark:text-gray-400';
-    if (rank === 3) return 'text-orange-600 dark:text-orange-400';
-    return 'text-blue-600 dark:text-blue-400';
+  const { data: competitionStats, error: competitionError, refetch: refetchCompetitionStats } = useQuery({
+    queryKey: ['stallOwner', 'competitionStats'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getCompetitionStats();
+        setLastUpdated(new Date());
+        return response.data.data;
+      } catch (error) {
+        if (!handleAuthError(error)) throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 60000 : false, // 1 minute
+    staleTime: 30000, // 30 seconds
+    cacheTime: 300000,
+    enabled: !!stallData,
+    retry: 1,
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load competition stats');
+      }
+    }
+  });
+
+  const { data: liveVotes, error: votesError, refetch: refetchVotes } = useQuery({
+    queryKey: ['stallOwner', 'votes'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getLiveVotes({ limit: 20 });
+        setLastUpdated(new Date());
+        return response.data.data;
+      } catch (error) {
+        if (!handleAuthError(error)) throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 30000 : false, // 30 seconds for votes
+    staleTime: 15000,
+    cacheTime: 300000,
+    enabled: !!stallData,
+    retry: 1,
+    onSuccess: (data) => {
+      const currentCount = data.totalVotes || 0;
+      if (prevVoteCountRef.current > 0 && currentCount > prevVoteCountRef.current) {
+        const newVotes = currentCount - prevVoteCountRef.current;
+        toast.success(`🗳️ ${newVotes} new vote${newVotes > 1 ? 's' : ''}!`, { duration: 4000 });
+      }
+      prevVoteCountRef.current = currentCount;
+    },
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load votes');
+      }
+    }
+  });
+
+  const { data: liveFeedbacks, error: feedbacksError, refetch: refetchFeedbacks } = useQuery({
+    queryKey: ['stallOwner', 'feedbacks'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getLiveFeedbacks({ limit: 20 });
+        setLastUpdated(new Date());
+        return response.data.data;
+      } catch (error) {
+        if (!handleAuthError(error)) throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 45000 : false, // 45 seconds
+    staleTime: 20000,
+    cacheTime: 300000,
+    enabled: !!stallData,
+    retry: 1,
+    onSuccess: (data) => {
+      const currentCount = data.stats?.totalFeedbacks || 0;
+      if (prevFeedbackCountRef.current > 0 && currentCount > prevFeedbackCountRef.current) {
+        const newFeedbacks = currentCount - prevFeedbackCountRef.current;
+        toast.success(`⭐ ${newFeedbacks} new feedback${newFeedbacks > 1 ? 's' : ''}!`, { duration: 4000 });
+      }
+      prevFeedbackCountRef.current = currentCount;
+    },
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load feedbacks');
+      }
+    }
+  });
+
+  const { data: recentActivity, error: activityError, refetch: refetchRecentActivity } = useQuery({
+    queryKey: ['stallOwner', 'recentActivity'],
+    queryFn: async () => {
+      try {
+        const response = await stallOwnerApi.getRecentActivity({ limit: 15 });
+        setLastUpdated(new Date());
+        return response.data.data;
+      } catch (error) {
+        if (!handleAuthError(error)) throw error;
+      }
+    },
+    refetchInterval: autoRefresh ? 60000 : false, // 1 minute
+    staleTime: 30000,
+    cacheTime: 300000,
+    enabled: !!stallData,
+    retry: 1,
+    onError: (error) => {
+      if (!handleAuthError(error)) {
+        toast.error('Failed to load recent activity');
+      }
+    }
+  });
+
+  // Optimized manual refresh
+  const handleManualRefresh = async () => {
+    setLastUpdated(new Date());
+    
+    // Invalidate all stall owner queries to force fresh data
+    queryClient.invalidateQueries({ queryKey: ['stallOwner'] });
+    
+    toast.promise(
+      Promise.all([
+        refetchMyStall(),
+        refetchLeaderboard(),
+        refetchCompetitionStats(),
+        refetchVotes(),
+        refetchFeedbacks(),
+        refetchRecentActivity()
+      ]),
+      {
+        loading: '🔄 Refreshing all data...',
+        success: '✅ Dashboard updated!',
+        error: '❌ Refresh failed'
+      }
+    );
+  };
+
+  // Check for any loading states or errors
+  const isLoading = loadingStall || loadingLeaderboard;
+  const hasErrors = stallError || leaderboardError || competitionError || votesError || feedbacksError || activityError;
+
+  // Simple helper functions
+  const getRankIcon = (rank) => {
+    if (rank === 1) return '🥇';
+    if (rank === 2) return '🥈';
+    if (rank === 3) return '🥉';
+    return `#${rank}`;
   };
 
   const getRankBadge = (rank) => {
@@ -278,12 +285,85 @@ export default function StallOwnerDashboard() {
     return `#${rank}`;
   };
 
-  if (loadingStall || loadingLeaderboard) {
+  const getRankColor = (rank) => {
+    if (rank === 1) return 'text-yellow-600 dark:text-yellow-400';
+    if (rank === 2) return 'text-gray-600 dark:text-gray-400';  
+    if (rank === 3) return 'text-orange-600 dark:text-orange-400';
+    return 'text-blue-600 dark:text-blue-400';
+  };
+
+  // Show loading state
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50 dark:from-gray-900 dark:to-blue-900/20">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
           <p className="text-xl font-semibold text-gray-700 dark:text-gray-300">Loading Dashboard...</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Fetching your stall data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check for authentication errors specifically - only show session expired if ALL critical queries fail with auth errors
+  const authErrorCount = [stallError, leaderboardError].filter(error => 
+    error?.response?.status === 401 || error?.message?.includes('Session expired')
+  ).length;
+  
+  const showSessionExpired = authErrorCount >= 2; // Only show if multiple auth failures
+
+  // Show session expired message only if multiple auth failures
+  if (showSessionExpired && !myStall) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-yellow-50 to-orange-50 dark:from-gray-900 dark:to-yellow-900/20">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-yellow-600 dark:text-yellow-400 mb-4">
+            <LogOut size={64} className="mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Session Expired</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            Your login session has expired. Please log in again to access your stall dashboard.
+          </p>
+          <button
+            onClick={() => navigate('/stall-owner/login')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto"
+          >
+            <LogOut size={20} />
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state with retry option for other errors
+  if (hasErrors && !showSessionExpired) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-50 dark:from-gray-900 dark:to-red-900/20">
+        <div className="text-center max-w-md mx-auto p-6">
+          <div className="text-red-600 dark:text-red-400 mb-4">
+            <Activity size={64} className="mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Connection Error</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-4">
+            Unable to load dashboard data. Please check your connection and try again.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={handleManualRefresh}
+              className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center gap-2 justify-center"
+            >
+              <RefreshCw size={20} />
+              Retry
+            </button>
+            <button
+              onClick={() => navigate('/stall-owner/login')}
+              className="w-full px-6 py-3 bg-gray-600 text-white rounded-lg font-semibold hover:bg-gray-700 transition-colors flex items-center gap-2 justify-center"
+            >
+              <LogOut size={20} />
+              Login Again
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -313,33 +393,35 @@ export default function StallOwnerDashboard() {
                   {myStall?.department || stallData?.department} • {myStall?.ownerName || stallData?.ownerName}
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                  {liveUpdatesEnabled ? (
+                  {autoRefresh ? (
                     <>
-                      🟢 Live updates enabled • Polling every {Math.round(pollingInterval/1000)}s • Last updated: {lastUpdated.toLocaleTimeString()}
-                      {dataChangeDetected.current && <span className="text-green-600 font-semibold"> • Activity detected!</span>}
+                      🟢 Auto-refresh: ON • Last updated: {lastUpdated.toLocaleTimeString()}
                     </>
                   ) : (
                     <>
-                      🔴 Live updates disabled • Use refresh button to update data
+                      🔴 Auto-refresh: OFF • Manual refresh only
                     </>
+                  )}
+                  {(stallError?.response?.status === 401 || leaderboardError?.response?.status === 401) && (
+                    <span className="text-red-600 font-semibold"> • ⚠️ Authentication issues detected</span>
                   )}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
-              {/* Live Updates Toggle */}
+              {/* Auto-Refresh Toggle */}
               <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-                <Activity size={16} className={liveUpdatesEnabled ? 'text-green-500' : 'text-gray-400'} />
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Live Updates</span>
+                <Zap size={16} className={autoRefresh ? 'text-green-500' : 'text-gray-400'} />
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Auto-Refresh</span>
                 <button
-                  onClick={() => setLiveUpdatesEnabled(!liveUpdatesEnabled)}
+                  onClick={() => setAutoRefresh(!autoRefresh)}
                   className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    liveUpdatesEnabled ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
+                    autoRefresh ? 'bg-green-600' : 'bg-gray-300 dark:bg-gray-600'
                   }`}
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      liveUpdatesEnabled ? 'translate-x-6' : 'translate-x-1'
+                      autoRefresh ? 'translate-x-6' : 'translate-x-1'
                     }`}
                   />
                 </button>
@@ -362,6 +444,17 @@ export default function StallOwnerDashboard() {
                 <QrCode size={20} />
                 Show QR Code
               </button>
+              {/* Show login button if there are auth errors */}
+              {(stallError?.response?.status === 401 || leaderboardError?.response?.status === 401) && (
+                <button
+                  onClick={() => navigate('/stall-owner/login')}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded-lg font-semibold hover:bg-yellow-700 transition-colors flex items-center gap-2"
+                >
+                  <LogOut size={20} />
+                  Login Again
+                </button>
+              )}
+
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition-colors flex items-center gap-2"
@@ -445,7 +538,7 @@ export default function StallOwnerDashboard() {
               <div>
                 <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300 mb-1">Your Rank</p>
                 <p className={`text-5xl font-bold ${getRankColor(leaderboard?.myPosition || 0)}`}>
-                  {getRankBadge(leaderboard?.myPosition || 0)}
+                  {getRankIcon(leaderboard?.myPosition || 0)}
                 </p>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                   out of {leaderboard?.totalStalls || 0} stalls
@@ -453,7 +546,6 @@ export default function StallOwnerDashboard() {
               </div>
               <div className="flex flex-col items-center gap-2">
                 <Trophy className="w-12 h-12 text-yellow-600 dark:text-yellow-400" />
-                {getRankIcon(leaderboard?.myPosition || 0, myStall?.id)}
               </div>
             </div>
             {competitionStats?.isLeading && (
@@ -480,8 +572,17 @@ export default function StallOwnerDashboard() {
               <ThumbsUp className="w-12 h-12 text-blue-600 dark:text-blue-400" />
             </div>
             <div className="mt-3 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-              <RefreshCw size={12} className="animate-spin" />
-              <span>Live updates every 5 sec</span>
+              {autoRefresh ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin" />
+                  <span>Auto-updating every 30s</span>
+                </>
+              ) : (
+                <>
+                  <RefreshCw size={12} className="text-gray-400" />
+                  <span>Manual refresh only</span>
+                </>
+              )}
             </div>
           </div>
 
@@ -533,13 +634,15 @@ export default function StallOwnerDashboard() {
             </h2>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
-                <Activity size={18} className="text-blue-600 dark:text-blue-400 animate-pulse" />
+                <Activity size={18} className="text-blue-600 dark:text-blue-400" />
                 <span className="text-sm font-semibold text-blue-900 dark:text-blue-100">LIVE</span>
               </div>
-              <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
-                <RefreshCw size={16} className="text-green-600 dark:text-green-400 animate-spin" />
-                <span className="text-xs font-semibold text-green-900 dark:text-green-100">Auto-refresh: 5s</span>
-              </div>
+              {autoRefresh && (
+                <div className="flex items-center gap-2 px-4 py-2 bg-green-100 dark:bg-green-900/30 rounded-lg">
+                  <RefreshCw size={16} className="text-green-600 dark:text-green-400 animate-spin" />
+                  <span className="text-xs font-semibold text-green-900 dark:text-green-100">Auto-refresh: 45s</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -606,12 +709,8 @@ export default function StallOwnerDashboard() {
                     className={`${
                       stall.isMyStall
                         ? 'bg-gradient-to-r from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50 border-l-4 border-blue-600'
-                        : rankChanges[stall.id]
-                        ? rankChanges[stall.id] > 0
-                          ? 'bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 animate-pulse'
-                          : 'bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 animate-pulse'
                         : 'bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    } transition-all duration-500`}
+                    } transition-all duration-300`}
                   >
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-2">
@@ -621,20 +720,6 @@ export default function StallOwnerDashboard() {
                           {stall.rank === 3 && '🥉'}
                           {stall.rank > 3 && `#${stall.rank}`}
                         </span>
-                        {rankChanges[stall.id] && (
-                          <div className="flex flex-col items-center">
-                            {rankChanges[stall.id] > 0 ? (
-                              <ArrowUp className="text-green-600 dark:text-green-400 animate-bounce" size={20} />
-                            ) : (
-                              <ArrowDown className="text-red-600 dark:text-red-400 animate-bounce" size={20} />
-                            )}
-                            <span className={`text-xs font-bold ${
-                              rankChanges[stall.id] > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                              {rankChanges[stall.id] > 0 ? '+' : ''}{rankChanges[stall.id]}
-                            </span>
-                          </div>
-                        )}
                       </div>
                     </td>
                     <td className="px-4 py-4">
@@ -645,7 +730,6 @@ export default function StallOwnerDashboard() {
                             {stall.isMyStall && (
                               <span className="px-2 py-1 bg-blue-600 text-white text-xs rounded-full">YOU</span>
                             )}
-                            {getPositionChangeBadge(stall.id)}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400">{stall.location}</div>
                         </div>
@@ -701,7 +785,7 @@ export default function StallOwnerDashboard() {
                           {activity.type === 'vote' ? '👍 New Vote' : '💬 New Feedback'}
                         </p>
                         <p className="text-sm text-gray-700 dark:text-gray-300">
-                          <strong>{activity.student?.name}</strong> ({activity.student?.rollNumber})
+                          <strong>{activity.student?.name}</strong> ({activity.student?.regNo})
                         </p>
                         <p className="text-xs text-gray-600 dark:text-gray-400">
                           {activity.student?.department} • {activity.student?.year}
@@ -806,7 +890,7 @@ export default function StallOwnerDashboard() {
                   <div>
                     <p className="font-semibold text-gray-900 dark:text-white">{feedback.student?.name}</p>
                     <p className="text-xs text-gray-600 dark:text-gray-400">
-                      {feedback.student?.rollNumber} • {feedback.student?.department}
+                      {feedback.student?.regNo} • {feedback.student?.department}
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
@@ -820,9 +904,9 @@ export default function StallOwnerDashboard() {
                     ))}
                   </div>
                 </div>
-                {feedback.comment && (
+                {feedback.comments && (
                   <p className="text-sm text-gray-700 dark:text-gray-300 italic bg-white dark:bg-gray-900 p-3 rounded-lg mt-2">
-                    "{feedback.comment}"
+                    "{feedback.comments}"
                   </p>
                 )}
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">

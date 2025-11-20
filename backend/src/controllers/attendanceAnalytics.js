@@ -59,8 +59,8 @@ exports.getComprehensiveAttendance = async (req, res, next) => {
             id: record.student.id,
             name: record.student.name,
             rollNumber: record.student.rollNumber,
-            department: record.student.department,
-            email: record.student.email
+            regNo: record.student.regNo,
+            department: record.student.department
           },
           sessions: [],
           statistics: {

@@ -6,6 +6,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import Login from './pages/Login';
 import ForgotPassword from './pages/Auth/ForgotPassword';
 import StudentDashboard from './pages/Student/Dashboard';
+import StudentVerification from './pages/Student/Verification';
+import StudentPasswordReset from './pages/Student/PasswordReset';
 import VolunteerDashboard from './pages/Volunteer/Dashboard';
 import AdminDashboard from './pages/Admin/Dashboard';
 import StallOwnerLogin from './pages/StallOwner/Login';
@@ -45,6 +47,24 @@ function App() {
         <Route path="/forgot-password" element={user ? <Navigate to="/" /> : <ForgotPassword />} />
         <Route path="/stall-owner/login" element={<StallOwnerLogin />} />
         <Route path="/stall-owner/dashboard" element={<StallOwnerDashboard />} />
+        
+        {/* Student verification routes - protected */}
+        <Route 
+          path="/student/verify" 
+          element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <StudentVerification />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/student/reset-password" 
+          element={
+            <ProtectedRoute allowedRoles={['student']}>
+              <StudentPasswordReset />
+            </ProtectedRoute>
+          } 
+        />
         
         <Route
           path="/"

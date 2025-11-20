@@ -1,5 +1,6 @@
 const { sequelize } = require('../config/database');
 const User = require('./User.sequelize');
+const Volunteer = require('./Volunteer.sequelize');
 const Event = require('./Event.sequelize');
 const Stall = require('./Stall.sequelize');
 const Attendance = require('./Attendance.sequelize');
@@ -24,13 +25,16 @@ Stall.hasMany(Feedback, { foreignKey: 'stallId', as: 'feedbacks' });
 Stall.hasMany(Vote, { foreignKey: 'stallId', as: 'votes' });
 Stall.hasMany(ScanLog, { foreignKey: 'stallId', as: 'scanLogs' });
 
-// User associations
+// User associations (students, admins, stall_owners only)
 User.hasMany(Stall, { foreignKey: 'ownerId', as: 'ownedStalls' });
 User.hasMany(Attendance, { foreignKey: 'studentId', as: 'attendances' });
 User.hasMany(Feedback, { foreignKey: 'studentId', as: 'feedbacks' });
 User.hasMany(Vote, { foreignKey: 'studentId', as: 'votes' });
 User.hasMany(ScanLog, { foreignKey: 'userId', as: 'scanLogs' });
 User.hasMany(OTP, { foreignKey: 'userId', as: 'otps' });
+
+// Volunteer associations (separate table)
+Volunteer.hasMany(ScanLog, { foreignKey: 'scannedBy', as: 'performedScans' });
 
 // Attendance associations
 Attendance.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
@@ -46,9 +50,10 @@ Vote.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
 Vote.belongsTo(Stall, { foreignKey: 'stallId', as: 'stall' });
 Vote.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 
-// ScanLog associations
+// ScanLog associations (flexible - can be user or volunteer as scanner)
 ScanLog.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-ScanLog.belongsTo(User, { foreignKey: 'scannedBy', as: 'scanner' });
+// Note: scannedBy is handled differently now with scannedByType field
+// We'll handle scanner lookups manually in controllers based on scannedByType
 ScanLog.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
 ScanLog.belongsTo(Stall, { foreignKey: 'stallId', as: 'stall' });
 
@@ -73,6 +78,7 @@ const syncModels = async () => {
 module.exports = {
   sequelize,
   User,
+  Volunteer,
   Event,
   Stall,
   Attendance,
