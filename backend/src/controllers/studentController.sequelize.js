@@ -369,6 +369,42 @@ exports.castVote = async (req, res, next) => {
       }
     }
 
+    // NEW REQUIREMENT 1: Check if student has given feedback to this stall
+    const existingFeedback = await Feedback.findOne({
+      where: { studentId, stallId, eventId },
+    });
+
+    if (!existingFeedback) {
+      return res.status(403).json({
+        success: false,
+        message: 'You must give feedback to a stall before you can vote for it. Please visit the stall and submit your feedback first.',
+      });
+    }
+
+    // NEW REQUIREMENT 2: Check minimum feedback requirement (3 feedbacks in own department)
+    const feedbacksInOwnDept = await Feedback.count({
+      where: { 
+        studentId, 
+        eventId 
+      },
+      include: [{
+        model: Stall,
+        as: 'stall',
+        where: { 
+          department: student.department,
+          eventId: eventId 
+        },
+        required: true
+      }]
+    });
+
+    if (feedbacksInOwnDept < 3) {
+      return res.status(403).json({
+        success: false,
+        message: `You must give feedback to at least 3 stalls in your department (${student.department}) before you can vote. Current: ${feedbacksInOwnDept}/3 feedbacks completed.`,
+      });
+    }
+
     // Check if vote already exists
     const existingVote = await Vote.findOne({
       where: { studentId, stallId, eventId },
@@ -751,6 +787,99 @@ exports.getStatus = async (req, res, next) => {
           stall: v.stall,
         })),
         feedbacksGiven: feedbackCount,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get student's voting eligibility status
+ * @route   GET /api/student/voting-eligibility/:eventId
+ * @access  Private (Student)
+ */
+exports.getVotingEligibility = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const studentId = req.user.id;
+
+    // Get student details with department
+    const student = await User.findByPk(studentId);
+    if (!student) {
+      return res.status(404).json({
+        success: false,
+        message: 'Student not found',
+      });
+    }
+
+    // Count feedbacks in own department
+    const feedbacksInOwnDept = await Feedback.count({
+      where: { 
+        studentId, 
+        eventId 
+      },
+      include: [{
+        model: Stall,
+        as: 'stall',
+        where: { 
+          department: student.department,
+          eventId: eventId 
+        },
+        required: true
+      }]
+    });
+
+    // Count total votes cast
+    const voteCount = await Vote.count({
+      where: { studentId, eventId },
+    });
+
+    // Get event details for max votes
+    const event = await Event.findByPk(eventId);
+    const maxVotes = event?.maxVotesPerStudent || 3;
+
+    // Check if voting is unlocked
+    const votingUnlocked = feedbacksInOwnDept >= 3;
+    const votesRemaining = votingUnlocked ? Math.max(0, maxVotes - voteCount) : 0;
+
+    // Get list of stalls student has given feedback to (for voting eligibility)
+    const stallsWithFeedback = await Feedback.findAll({
+      where: { studentId, eventId },
+      include: [{
+        model: Stall,
+        as: 'stall',
+        where: { 
+          department: student.department,
+          eventId: eventId 
+        },
+        attributes: ['id', 'name', 'department'],
+        required: true
+      }],
+      attributes: ['stallId']
+    });
+
+    const eligibleStallIds = stallsWithFeedback.map(f => f.stallId);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        studentDepartment: student.department,
+        feedbacksInOwnDept,
+        minimumRequired: 3,
+        votingUnlocked,
+        voteCount,
+        maxVotes,
+        votesRemaining,
+        eligibleStallIds,
+        requirements: {
+          departmentMatch: true,
+          minimumFeedbacks: feedbacksInOwnDept >= 3,
+          feedbackBeforeVote: true
+        },
+        message: votingUnlocked 
+          ? `Voting unlocked! You have ${votesRemaining} votes remaining.`
+          : `Complete ${3 - feedbacksInOwnDept} more feedbacks in ${student.department} department to unlock voting.`
       },
     });
   } catch (error) {

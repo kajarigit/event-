@@ -91,6 +91,7 @@ export const studentApi = {
   castVote: (data) => api.post('/student/vote', data),
   getMyVotes: (eventId) => api.get(`/student/votes/${eventId}`),
   getMyFeedbacks: (eventId) => api.get(`/student/feedbacks/${eventId}`),
+  getVotingEligibility: (eventId) => api.get(`/student/voting-eligibility/${eventId}`),
   getAttendance: (eventId) => api.get(`/student/attendance/${eventId}`),
   getAttendanceSummary: (eventId) => api.get(`/student/attendance-summary/${eventId}`),
   getStatus: (eventId) => api.get(`/student/status/${eventId}`),

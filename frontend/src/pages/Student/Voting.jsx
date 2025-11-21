@@ -50,6 +50,16 @@ export default function StudentVoting() {
     enabled: !!selectedEvent,
   });
 
+  // Fetch voting eligibility status
+  const { data: votingEligibility, refetch: refetchEligibility } = useQuery({
+    queryKey: ['votingEligibility', selectedEvent],
+    queryFn: async () => {
+      const response = await studentApi.getVotingEligibility(selectedEvent);
+      return response.data?.data || {};
+    },
+    enabled: !!selectedEvent,
+  });
+
   // Fetch status to check if checked in
   const { data: status } = useQuery({
     queryKey: ['status', selectedEvent],
@@ -69,6 +79,7 @@ export default function StudentVoting() {
     onSuccess: () => {
       toast.success('Vote cast successfully!');
       refetchVotes();
+      refetchEligibility();
       setSelectedStalls({ 1: '', 2: '', 3: '' });
     },
     onError: (error) => {
@@ -154,7 +165,14 @@ export default function StudentVoting() {
       availableStalls = availableStalls.filter(stall => stall.department === user.department);
     }
 
-    // Apply search filter (after department filter)
+    // NEW REQUIREMENT: Only show stalls that student has given feedback to
+    if (votingEligibility?.eligibleStallIds) {
+      availableStalls = availableStalls.filter(stall => 
+        votingEligibility.eligibleStallIds.includes(stall.id)
+      );
+    }
+
+    // Apply search filter (after department and feedback filters)
     if (searchFilter.trim()) {
       const search = searchFilter.toLowerCase();
       availableStalls = availableStalls.filter(stall =>
@@ -216,6 +234,69 @@ export default function StudentVoting() {
                 <p className="text-xs text-blue-600 mt-2 italic">
                   Note: Feedback can be given to any stall, but voting is restricted to your department.
                 </p>
+              </div>
+            </div>
+          )}
+
+          {/* Voting Requirements & Eligibility */}
+          {votingEligibility && (
+            <div className={`border-2 rounded-lg p-4 flex items-start space-x-3 ${
+              votingEligibility.votingUnlocked 
+                ? 'bg-green-50 border-green-300'
+                : 'bg-orange-50 border-orange-300'
+            }`}>
+              <div className={`w-6 h-6 mt-0.5 flex-shrink-0 ${
+                votingEligibility.votingUnlocked 
+                  ? 'text-green-600'
+                  : 'text-orange-600'
+              }`}>
+                {votingEligibility.votingUnlocked ? <CheckCircle className="w-6 h-6" /> : <AlertCircle className="w-6 h-6" />}
+              </div>
+              <div className="flex-1">
+                <h4 className={`font-bold text-lg ${
+                  votingEligibility.votingUnlocked 
+                    ? 'text-green-900'
+                    : 'text-orange-900'
+                }`}>
+                  {votingEligibility.votingUnlocked ? '🔓 Voting Unlocked!' : '🔒 Voting Locked'}
+                </h4>
+                <p className={`text-sm mt-1 ${
+                  votingEligibility.votingUnlocked 
+                    ? 'text-green-800'
+                    : 'text-orange-800'
+                }`}>
+                  {votingEligibility.message}
+                </p>
+                
+                <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
+                  <div className={`p-2 rounded ${
+                    votingEligibility.votingUnlocked 
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-orange-100 text-orange-800'
+                  }`}>
+                    <div className="font-semibold">Feedback Progress</div>
+                    <div>{votingEligibility.feedbacksInOwnDept}/{votingEligibility.minimumRequired} feedbacks in {votingEligibility.studentDepartment}</div>
+                  </div>
+                  <div className={`p-2 rounded ${
+                    votingEligibility.votesRemaining > 0 
+                      ? 'bg-blue-100 text-blue-800'
+                      : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    <div className="font-semibold">Votes Available</div>
+                    <div>{votingEligibility.votesRemaining}/{votingEligibility.maxVotes} remaining</div>
+                  </div>
+                </div>
+
+                {!votingEligibility.votingUnlocked && (
+                  <div className="mt-3 p-3 bg-orange-100 rounded-lg">
+                    <div className="text-xs text-orange-800">
+                      <div className="font-semibold mb-1">To unlock voting:</div>
+                      <div>1. ✅ Must be from same department (already met)</div>
+                      <div>2. {votingEligibility.feedbacksInOwnDept >= 3 ? '✅' : '❌'} Give feedback to 3+ stalls in {votingEligibility.studentDepartment}</div>
+                      <div>3. ✅ Must have given feedback to stall before voting for it</div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -302,10 +383,17 @@ export default function StudentVoting() {
                   onChange={(e) =>
                     setSelectedStalls({ ...selectedStalls, [rank]: e.target.value })
                   }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-3"
-                  disabled={!status?.isCheckedIn}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 mb-3 disabled:bg-gray-100 disabled:text-gray-500"
+                  disabled={!status?.isCheckedIn || !votingEligibility?.votingUnlocked}
                 >
-                  <option value="">-- Select Stall --</option>
+                  <option value="">
+                    {!votingEligibility?.votingUnlocked 
+                      ? "-- Voting Locked (Need 3+ feedbacks) --"
+                      : getAvailableStalls(rank).length === 0
+                        ? "-- No eligible stalls (need feedback first) --"
+                        : "-- Select Stall --"
+                    }
+                  </option>
                   {getAvailableStalls(rank).map((stall) => (
                     <option key={stall.id} value={stall.id}>
                       {stall.name} ({stall.department})
@@ -315,10 +403,32 @@ export default function StudentVoting() {
 
                 <button
                   onClick={() => handleSubmitVote(rank)}
-                  disabled={!selectedStalls[rank] || voteMutation.isLoading || !status?.isCheckedIn}
+                  disabled={
+                    !selectedStalls[rank] || 
+                    voteMutation.isLoading || 
+                    !status?.isCheckedIn || 
+                    !votingEligibility?.votingUnlocked ||
+                    votingEligibility?.votesRemaining <= 0
+                  }
                   className="w-full btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={
+                    !votingEligibility?.votingUnlocked 
+                      ? "Complete 3+ feedbacks in your department to unlock voting"
+                      : !status?.isCheckedIn 
+                        ? "Must be checked in to vote"
+                        : votingEligibility?.votesRemaining <= 0
+                          ? "No votes remaining"
+                          : ""
+                  }
                 >
-                  {voteMutation.isLoading ? 'Submitting...' : `Vote for Rank ${rank}`}
+                  {voteMutation.isLoading 
+                    ? 'Submitting...' 
+                    : !votingEligibility?.votingUnlocked
+                      ? `🔒 Locked (Need ${3 - (votingEligibility?.feedbacksInOwnDept || 0)} more feedbacks)`
+                      : votingEligibility?.votesRemaining <= 0
+                        ? '❌ No votes remaining'
+                        : `Vote for Rank ${rank}`
+                  }
                 </button>
               </div>
             ))}
@@ -326,15 +436,24 @@ export default function StudentVoting() {
 
           {/* Instructions */}
           <div className="card bg-gray-50">
-            <h3 className="font-semibold mb-2">Voting Instructions:</h3>
+            <h3 className="font-semibold mb-2">New Voting Requirements:</h3>
             <ul className="text-sm text-gray-700 space-y-1">
-              <li>• Select your top 3 favorite stalls from your department ({user?.department || 'your department'})</li>
-              <li>• Rank 1 gets 3 points, Rank 2 gets 2 points, Rank 3 gets 1 point</li>
-              <li>• You cannot vote for the same stall multiple times</li>
-              <li>• You can change your votes anytime before the event ends</li>
+              <li>• <span className="font-semibold text-red-600">NEW:</span> Must give feedback to at least 3 stalls in your department ({user?.department || 'your department'}) before voting is unlocked</li>
+              <li>• <span className="font-semibold text-red-600">NEW:</span> Can only vote for stalls you have already given feedback to</li>
+              <li>• Must be from same department: You can only vote for stalls from {user?.department || 'your department'}</li>
+              <li>• Select your top 3 favorite stalls (ranked voting)</li>
+              <li>• Cannot vote for the same stall multiple times</li>
+              <li>• Can change votes anytime before the event ends</li>
               <li>• Must be checked-in to vote</li>
-              <li className="font-semibold text-blue-700">• Department Restriction: You can only vote for stalls from {user?.department || 'your department'}</li>
             </ul>
+            <div className="mt-3 p-3 bg-blue-100 rounded-lg">
+              <div className="text-xs text-blue-800">
+                <div className="font-semibold">💡 How to unlock voting:</div>
+                <div>1. Visit stalls in your department and give feedback</div>
+                <div>2. Complete at least 3 feedbacks in {user?.department || 'your department'}</div>
+                <div>3. Return here to vote for those stalls</div>
+              </div>
+            </div>
           </div>
 
           {/* No Stalls Available Message */}

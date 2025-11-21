@@ -77,9 +77,6 @@ router.post(
   [
     body('stallId').notEmpty().withMessage('Stall ID is required'),
     body('eventId').notEmpty().withMessage('Event ID is required'),
-    body('rank')
-      .isInt({ min: 1, max: 3 })
-      .withMessage('Rank must be between 1 and 3'),
   ],
   validate,
   studentController.castVote
@@ -99,6 +96,14 @@ router.get(
   protect,
   authorize('student'),
   studentController.getMyFeedbacks
+);
+
+// Get voting eligibility status
+router.get(
+  '/voting-eligibility/:eventId',
+  protect,
+  authorize('student'),
+  studentController.getVotingEligibility
 );
 
 // Get attendance history
