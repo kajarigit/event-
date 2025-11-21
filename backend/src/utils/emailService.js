@@ -297,10 +297,21 @@ const sendStallQRCode = async (stall, qrCodeDataURL, event) => {
     return { success: false, error: 'Email service not configured' };
   }
 
+  // Convert data URL to attachment
+  const qrCodeBuffer = Buffer.from(qrCodeDataURL.split(',')[1], 'base64');
+
   const mailOptions = {
     from: `"Event Management System" <${process.env.EMAIL_USER}>`,
     to: stall.ownerEmail,
     subject: `🎪 Your Stall QR Code - ${stall.name} | ${event.name}`,
+    attachments: [
+      {
+        filename: 'stall-qr-code.png',
+        content: qrCodeBuffer,
+        encoding: 'base64',
+        cid: 'stallqrcode' // Content-ID for referencing in HTML
+      }
+    ],
     html: `
       <!DOCTYPE html>
       <html>
@@ -372,7 +383,7 @@ const sendStallQRCode = async (stall, qrCodeDataURL, event) => {
             
             <div class="qr-container">
               <h3 style="margin-top: 0; color: #f5576c;">📱 Your Feedback QR Code</h3>
-              <img src="${qrCodeDataURL}" alt="Stall QR Code" class="qr-code" />
+              <img src="cid:stallqrcode" alt="Stall QR Code" class="qr-code" />
               <p style="margin: 15px 0 0 0; color: #666; font-size: 14px;">
                 Students scan this to provide feedback and vote for your stall
               </p>
@@ -461,10 +472,21 @@ const sendStallOwnerCredentials = async (stall, qrCodeDataURL, event, password) 
   const dashboardUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
   const loginUrl = `${dashboardUrl}/stall-owner/login`;
 
+  // Convert data URL to attachment
+  const qrCodeBuffer = Buffer.from(qrCodeDataURL.split(',')[1], 'base64');
+
   const mailOptions = {
     from: `"Event Management System" <${process.env.EMAIL_USER}>`,
     to: stall.ownerEmail,
     subject: `🏪 Stall Owner Dashboard Access - ${stall.name} | ${event.name}`,
+    attachments: [
+      {
+        filename: 'stall-qr-code.png',
+        content: qrCodeBuffer,
+        encoding: 'base64',
+        cid: 'stallqrcode' // Content-ID for referencing in HTML
+      }
+    ],
     html: `
       <!DOCTYPE html>
       <html>
@@ -564,7 +586,7 @@ const sendStallOwnerCredentials = async (stall, qrCodeDataURL, event, password) 
             <div class="qr-container">
               <h3 style="margin-top: 0; color: #667eea;">📱 Your Stall QR Code</h3>
               <p>Display this QR code at your stall for students to scan:</p>
-              <img src="${qrCodeDataURL}" alt="Stall QR Code" class="qr-code" />
+              <img src="cid:stallqrcode" alt="Stall QR Code" class="qr-code" />
               <p style="margin: 15px 0 0 0; font-size: 14px; color: #666;">
                 Students will scan this code to give you votes and feedback!
               </p>
