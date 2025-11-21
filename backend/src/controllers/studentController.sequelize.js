@@ -522,24 +522,44 @@ exports.getAttendance = async (req, res, next) => {
     });
 
     // Format the response with proper status and timestamps
-    const formattedAttendances = attendances.map(att => ({
-      id: att.id,
-      eventId: att.eventId,
-      event: att.event,
-      status: att.checkOutTime ? 'checked-out' : 'checked-in', // Fix: Calculate actual status
-      checkInTime: att.checkInTime,
-      checkOutTime: att.checkOutTime,
-      inTimestamp: att.checkInTime,  // For frontend compatibility
-      outTimestamp: att.checkOutTime, // For frontend compatibility
-      durationSeconds: att.checkOutTime 
+    const formattedAttendances = attendances.map(att => {
+      const totalDuration = att.checkOutTime 
         ? Math.floor((new Date(att.checkOutTime) - new Date(att.checkInTime)) / 1000)
-        : null,
-    }));
+        : null;
+      
+      const nullifiedDuration = att.nullifiedDuration || 0;
+      const countableDuration = totalDuration ? Math.max(0, totalDuration - nullifiedDuration) : null;
+      
+      return {
+        id: att.id,
+        eventId: att.eventId,
+        event: att.event,
+        status: att.status || (att.checkOutTime ? 'checked-out' : 'checked-in'), // Use actual status from DB
+        checkInTime: att.checkInTime,
+        checkOutTime: att.checkOutTime,
+        inTimestamp: att.checkInTime,  // For frontend compatibility
+        outTimestamp: att.checkOutTime, // For frontend compatibility
+        isNullified: att.isNullified,
+        nullifiedReason: att.nullifiedReason,
+        eventStopTime: att.eventStopTime,
+        durationSeconds: totalDuration, // Original total duration
+        nullifiedDurationSeconds: nullifiedDuration, // Time that was nullified
+        countableDurationSeconds: countableDuration, // Actual countable time
+      };
+    });
 
-    // Calculate total duration for completed sessions
+    // Calculate total durations
     const totalDurationSeconds = formattedAttendances
       .filter(att => att.durationSeconds)
       .reduce((sum, att) => sum + att.durationSeconds, 0);
+      
+    const totalCountableDurationSeconds = formattedAttendances
+      .filter(att => att.countableDurationSeconds)
+      .reduce((sum, att) => sum + att.countableDurationSeconds, 0);
+      
+    const totalNullifiedDurationSeconds = formattedAttendances
+      .filter(att => att.nullifiedDurationSeconds)
+      .reduce((sum, att) => sum + att.nullifiedDurationSeconds, 0);
 
     res.status(200).json({
       success: true,
@@ -547,6 +567,9 @@ exports.getAttendance = async (req, res, next) => {
       data: {
         attendances: formattedAttendances,
         totalDurationSeconds,
+        totalCountableDurationSeconds,
+        totalNullifiedDurationSeconds,
+        hasNullifiedTime: totalNullifiedDurationSeconds > 0,
       },
     });
   } catch (error) {
