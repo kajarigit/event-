@@ -75,11 +75,19 @@ export const AuthProvider = ({ children }) => {
   const login = async (loginData) => {
     try {
       const response = await api.post('/auth/login', loginData);
-      const { user, accessToken, refreshToken, needsVerification, redirectTo } = response.data.data;
+      const { user, accessToken, refreshToken, needsVerification, isDefaultPassword, redirectTo } = response.data.data;
 
       localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      if (refreshToken) {
+        localStorage.setItem('refreshToken', refreshToken);
+      }
       setUser(user);
+
+      // Handle default password security block
+      if (isDefaultPassword) {
+        toast.error('Security Alert: You must change your default password before accessing the dashboard');
+        return { user, needsVerification: true, isDefaultPassword: true, redirectTo };
+      }
 
       // Handle first-time login verification
       if (needsVerification) {

@@ -51,6 +51,13 @@ export default function Login() {
 
       const response = await login(loginData);
       
+      // Check if student is using default password (security block)
+      if (response.isDefaultPassword) {
+        toast.error('Security requirement: You must change your default password');
+        navigate('/student/verify');
+        return;
+      }
+      
       // Check if student needs verification
       if (response.needsVerification) {
         navigate('/student/verify');

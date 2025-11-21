@@ -31,7 +31,49 @@ const protect = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    console.log('🔐 Token decoded:', { userId: decoded.userId, role: decoded.role });
+    console.log('🔐 Token decoded:', { 
+      userId: decoded.userId, 
+      role: decoded.role,
+      scope: decoded.scope,
+      isVerificationToken: decoded.isVerificationToken
+    });
+
+    // Check if this is a verification-only token
+    if (decoded.isVerificationToken && decoded.scope === 'verification-only') {
+      // Limited token - only allow access to verification endpoints
+      const allowedPaths = [
+        '/verify-student',
+        '/reset-password-after-verification',
+        '/me' // Allow basic user info
+      ];
+      
+      const isAllowedPath = allowedPaths.some(path => req.path === path);
+      
+      console.log('🔍 VERIFICATION TOKEN DEBUG:', {
+        path: req.path,
+        allowedPaths,
+        isAllowedPath,
+        isVerificationToken: decoded.isVerificationToken,
+        scope: decoded.scope
+      });
+      
+      if (!isAllowedPath) {
+        console.log('🚨 VERIFICATION TOKEN BLOCKED:', {
+          path: req.path,
+          allowedPaths,
+          isVerificationToken: true
+        });
+        
+        return res.status(403).json({
+          success: false,
+          message: 'Your account requires verification. Please complete the verification process before accessing this feature.',
+          requiresVerification: true,
+          redirectTo: '/student/verify'
+        });
+      }
+      
+      console.log('✅ Verification token allowed for path:', req.path);
+    }
 
     // Get user/stall based on role
     if (decoded.role === 'stall_owner') {

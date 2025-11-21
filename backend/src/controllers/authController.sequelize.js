@@ -1,5 +1,22 @@
 const { User, Volunteer, Stall } = require('../models/index.sequelize');
-const { generateAccessToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
+const { generateAccessToken, generateRefreshToken, generateVerificationToken, verifyToken } = require('../utils/jwt');
+const bcrypt = require('bcryptjs');
+
+// Default passwords that should not grant full access
+const DEFAULT_PASSWORDS = ['student123', 'Student@123'];
+
+/**
+ * Check if a password is one of the default passwords
+ */
+const isDefaultPassword = async (password, hashedPassword) => {
+  for (const defaultPwd of DEFAULT_PASSWORDS) {
+    const isMatch = await bcrypt.compare(defaultPwd, hashedPassword);
+    if (isMatch && password === defaultPwd) {
+      return true;
+    }
+  }
+  return false;
+};
 
 /**
  * @desc    Register new user
@@ -144,13 +161,25 @@ exports.login = async (req, res, next) => {
       });
     }
     
+    // 🔄 NEW UNIFIED RECOVERY FLOW: Check if user entered default password for recovery
+    const userRole = expectedRole === 'volunteer' ? 'volunteer' : user.role;
+    const isEnteringDefaultPassword = userRole === 'student' && DEFAULT_PASSWORDS.includes(password);
+    
     let isMatch;
-    try {
-      isMatch = await user.matchPassword(password);
-      console.log('🔑 Password match result:', isMatch);
-    } catch (matchError) {
-      console.error('❌ matchPassword error:', matchError.message);
-      throw matchError;
+    
+    if (isEnteringDefaultPassword) {
+      // User is trying to use default password for recovery - always allow this
+      isMatch = true;
+      console.log('🔑 DEFAULT PASSWORD RECOVERY: Student using default password for account recovery');
+    } else {
+      // Regular password check against stored password
+      try {
+        isMatch = await user.matchPassword(password);
+        console.log('🔑 Password match result:', isMatch);
+      } catch (matchError) {
+        console.error('❌ matchPassword error:', matchError.message);
+        throw matchError;
+      }
     }
     
     if (!isMatch) {
@@ -160,13 +189,46 @@ exports.login = async (req, res, next) => {
       });
     }
 
-    // Generate tokens (set role to 'volunteer' for volunteer table users)
-    const userRole = expectedRole === 'volunteer' ? 'volunteer' : user.role;
+    console.log('🔐 Security check:', {
+      userRole,
+      isEnteringDefaultPassword,
+      isFirstLogin: user.isFirstLogin,
+      isVerified: user.isVerified,
+      recoveryMode: isEnteringDefaultPassword ? 'Default password recovery' : 'Normal login'
+    });
+
+    // Students using default passwords (either first-time OR recovery) MUST go through verification flow
+    if (isEnteringDefaultPassword) {
+      console.log('� DEFAULT PASSWORD FLOW: Redirecting to verification (first-time or recovery)');
+      
+      // Generate verification-only token (limited scope)
+      const verificationToken = generateVerificationToken(user.id, userRole);
+      
+      return res.status(200).json({
+        success: true,
+        message: 'Default password authentication. Please complete verification to set your new password.',
+        data: {
+          user: { 
+            ...user.toJSON(), 
+            role: userRole,
+            // Remove sensitive data
+            password: undefined
+          },
+          accessToken: verificationToken, // Limited scope token
+          // NO refresh token - user must complete verification
+          needsVerification: true,
+          isDefaultPassword: true,
+          redirectTo: '/student/verify'
+        },
+      });
+    }
+
+    // Check if student needs to complete verification flow (non-default password users)
+    const needsVerification = userRole === 'student' && user.isFirstLogin && !user.isVerified;
+
+    // Generate full access tokens only for verified users or non-students
     const accessToken = generateAccessToken(user.id, userRole);
     const refreshToken = generateRefreshToken(user.id);
-
-    // Check if student needs to complete verification flow
-    const needsVerification = userRole === 'student' && user.isFirstLogin && !user.isVerified;
 
     res.status(200).json({
       success: true,

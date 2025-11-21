@@ -25,6 +25,23 @@ const generateRefreshToken = (userId) => {
 };
 
 /**
+ * Generate verification-only token (limited scope for default password users)
+ * This token only allows access to verification and password reset endpoints
+ */
+const generateVerificationToken = (userId, role) => {
+  return jwt.sign(
+    { 
+      userId, 
+      role, 
+      scope: 'verification-only',
+      isVerificationToken: true 
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: '2h' } // Short expiry for security
+  );
+};
+
+/**
  * Verify JWT token
  */
 const verifyToken = (token, isRefresh = false) => {
@@ -203,6 +220,7 @@ const generateStallQR = async (stallId, eventId) => {
 module.exports = {
   generateAccessToken,
   generateRefreshToken,
+  generateVerificationToken,
   verifyToken,
   generateQRToken,
   verifyQRToken,
