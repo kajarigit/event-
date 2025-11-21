@@ -42,6 +42,8 @@ router.delete('/events/:id', adminController.deleteEvent);
 router.put('/events/:id/toggle-active', adminController.toggleEventActive);
 router.patch('/events/:id/start', adminController.manuallyStartEvent);
 router.patch('/events/:id/end', adminController.manuallyEndEvent);
+router.patch('/events/:id/restart', adminController.restartEvent);
+router.get('/events/:id/attendance-summary', adminController.getEventAttendanceSummary);
 
 // Stalls
 router.get('/stalls', adminController.getStalls);

@@ -1,4 +1,4 @@
-const { Attendance, ScanLog, Event, User, Stall, Feedback, Vote, sequelize } = require('../models/index.sequelize');
+const { Attendance, StudentEventAttendanceSummary, ScanLog, Event, User, Stall, Feedback, Vote, sequelize } = require('../models/index.sequelize');
 const { verifyQRToken } = require('../utils/jwt');
 const { Op } = require('sequelize');
 
@@ -283,6 +283,34 @@ exports.scanStudent = async (req, res, next) => {
         { transaction }
       );
       
+      // Update attendance summary for check-in
+      const [summary, created] = await StudentEventAttendanceSummary.findOrCreate({
+        where: {
+          eventId,
+          studentId
+        },
+        defaults: {
+          totalValidDuration: 0,
+          totalNullifiedDuration: 0,
+          totalSessions: 1,
+          nullifiedSessions: 0,
+          lastCheckInTime: new Date(),
+          currentStatus: 'checked-in',
+          hasImproperCheckouts: false,
+          lastActivityDate: new Date().toISOString().split('T')[0]
+        },
+        transaction
+      });
+
+      if (!created) {
+        await summary.update({
+          totalSessions: summary.totalSessions + 1,
+          lastCheckInTime: new Date(),
+          currentStatus: 'checked-in',
+          lastActivityDate: new Date().toISOString().split('T')[0]
+        }, { transaction });
+      }
+      
       action = 'in';
       console.log('✅ [SCAN] CHECK-IN successful:', attendance.id);
       
@@ -312,6 +340,31 @@ exports.scanStudent = async (req, res, next) => {
         },
         { transaction }
       );
+      
+      // Calculate session duration and update attendance summary
+      const checkInTime = new Date(currentAttendance.checkInTime);
+      const checkOutTime = new Date();
+      const sessionDurationMs = checkOutTime - checkInTime;
+      const sessionDurationSeconds = Math.floor(sessionDurationMs / 1000);
+      
+      // Update attendance summary for check-out
+      const summary = await StudentEventAttendanceSummary.findOne({
+        where: {
+          eventId,
+          studentId
+        },
+        transaction
+      });
+
+      if (summary) {
+        await summary.update({
+          totalValidDuration: summary.totalValidDuration + sessionDurationSeconds,
+          currentStatus: 'checked-out',
+          lastActivityDate: new Date().toISOString().split('T')[0]
+        }, { transaction });
+        
+        console.log(`⏱️ Session duration: ${Math.floor(sessionDurationSeconds/60)} minutes. Total: ${Math.floor(summary.totalValidDuration/3600)} hours`);
+      }
       
       attendance = currentAttendance;
       action = 'out';

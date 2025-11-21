@@ -1,137 +1,182 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { adminApi } from '../../services/api';
-import { Clock, Users, Download, RefreshCw, Calendar, User } from 'lucide-react';
+import { Clock, Users, Download, RefreshCw, Calendar, User, TrendingUp, AlertTriangle, Award, Trophy } from 'lucide-react';
+import AttendanceSummaryTable from '../../components/attendance/AttendanceSummaryTable';
+import { WarningAlert, StatusBadge } from '../../components/ui/UIComponents';
 
 export default function SimpleAttendance() {
   const [selectedEvent, setSelectedEvent] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState('');
-  const [viewMode, setViewMode] = useState('event'); // 'event' or 'student'
+  const [viewMode, setViewMode] = useState('comprehensive'); // 'comprehensive' or 'rankings'
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [rankingCategory, setRankingCategory] = useState('totalTime'); // 'totalTime', 'validTime', 'consistency'
 
   // Fetch events for filter
   const { data: events = [] } = useQuery({
     queryKey: ['events'],
     queryFn: async () => {
-      const response = await adminApi.getEvents({ active: true });
+      const response = await adminApi.getEvents();
       return response.data?.data || response.data || [];
     },
   });
 
-  // Fetch event attendance records
-  const { data: eventAttendance, refetch: refetchEventAttendance, isLoading: eventLoading } = useQuery({
-    queryKey: ['eventAttendance', selectedEvent],
+  // Fetch comprehensive attendance data for rankings
+  const { data: attendanceRankings, refetch: refetchRankings, isLoading: rankingsLoading } = useQuery({
+    queryKey: ['attendanceRankings', selectedEvent, rankingCategory],
     queryFn: async () => {
-      const response = await adminApi.getEventAttendanceRecords(selectedEvent);
-      setLastUpdated(new Date());
-      return response.data?.data || response.data;
+      if (!selectedEvent) return null;
+      
+      const response = await adminApi.getEventAttendanceSummary(selectedEvent, {
+        page: 1,
+        limit: 100, // Get top 100 for rankings
+        showOnlyProblematic: false
+      });
+      
+      const data = response.data?.data;
+      if (!data) return null;
+
+      // Sort based on ranking category
+      let sortedSummaries = [...data.summaries];
+      
+      switch (rankingCategory) {
+        case 'totalTime':
+          sortedSummaries.sort((a, b) => 
+            (b.totalValidDuration + b.totalNullifiedDuration) - (a.totalValidDuration + a.totalNullifiedDuration)
+          );
+          break;
+        case 'validTime':
+          sortedSummaries.sort((a, b) => b.totalValidDuration - a.totalValidDuration);
+          break;
+        case 'consistency':
+          sortedSummaries.sort((a, b) => {
+            const aScore = a.hasImproperCheckouts ? 0 : a.totalValidDuration;
+            const bScore = b.hasImproperCheckouts ? 0 : b.totalValidDuration;
+            return bScore - aScore;
+          });
+          break;
+        default:
+          break;
+      }
+
+      return {
+        ...data,
+        summaries: sortedSummaries,
+        rankedBy: rankingCategory
+      };
     },
-    enabled: !!selectedEvent && viewMode === 'event',
-    refetchInterval: 30000, // Refresh every 30 seconds
+    enabled: !!selectedEvent && viewMode === 'rankings',
+    refetchInterval: 60000, // Refresh every minute for rankings
   });
 
-  // Fetch student attendance records
-  const { data: studentAttendance, refetch: refetchStudentAttendance, isLoading: studentLoading } = useQuery({
-    queryKey: ['studentAttendance', selectedStudent, selectedEvent],
-    queryFn: async () => {
-      const params = selectedEvent ? { eventId: selectedEvent } : {};
-      const response = await adminApi.getStudentAttendanceRecords(selectedStudent, params);
-      setLastUpdated(new Date());
-      return response.data?.data || response.data;
-    },
-    enabled: !!selectedStudent && viewMode === 'student',
-    refetchInterval: 30000,
-  });
+  // Auto-select first active event
+  useEffect(() => {
+    if (events.length > 0 && !selectedEvent) {
+      const activeEvent = events.find(e => e.isActive) || events[0];
+      setSelectedEvent(activeEvent.id);
+    }
+  }, [events, selectedEvent]);
 
   // Manual refresh
   const handleRefresh = () => {
-    if (viewMode === 'event' && selectedEvent) {
-      refetchEventAttendance();
-    } else if (viewMode === 'student' && selectedStudent) {
-      refetchStudentAttendance();
+    if (viewMode === 'rankings') {
+      refetchRankings();
+    }
+    setLastUpdated(new Date());
+  };
+
+  // Export rankings to CSV
+  const handleExportRankings = () => {
+    if (!attendanceRankings?.summaries) return;
+
+    const csvContent = [
+      ['Rank', 'Student Name', 'Reg Number', 'Department', 'Total Time', 'Valid Time', 'Nullified Time', 'Sessions', 'Status', 'Issues'].join(','),
+      ...attendanceRankings.summaries.map((summary, index) => [
+        index + 1,
+        summary.student.name,
+        summary.student.regNo,
+        summary.student.department || 'N/A',
+        summary.totalValidDurationFormatted,
+        summary.totalValidDurationFormatted,
+        summary.totalNullifiedDurationFormatted,
+        summary.totalSessions,
+        summary.hasImproperCheckouts ? 'Has Issues' : 'Clean',
+        summary.hasImproperCheckouts ? 'Improper Checkouts' : 'None'
+      ].map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const event = events.find(e => e.id.toString() === selectedEvent);
+    const filename = `attendance-rankings-${event?.name || 'event'}-${rankingCategory}-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getRankingTitle = () => {
+    switch (rankingCategory) {
+      case 'totalTime': return 'Total Attendance Time Rankings';
+      case 'validTime': return 'Valid Attendance Time Rankings';
+      case 'consistency': return 'Attendance Consistency Rankings';
+      default: return 'Attendance Rankings';
     }
   };
 
-  // Export to CSV
-  const handleExport = () => {
-    try {
-      let csvContent = '';
-      let filename = '';
-      
-      if (viewMode === 'event' && eventAttendance) {
-        csvContent = [
-          ['Student Name', 'Roll Number', 'Department', 'Check In Date', 'Check In Time', 'Check Out Date', 'Check Out Time', 'Duration', 'Status'].join(','),
-          ...eventAttendance.records.map(record => [
-            record.student.name,
-            record.student.rollNumber || '',
-            record.student.department || '',
-            record.checkInDate,
-            record.checkInTimeFormatted,
-            record.checkOutDate || '',
-            record.checkOutTimeFormatted || '',
-            record.durationFormatted,
-            record.isActive ? 'Active' : 'Completed'
-          ].map(cell => `"${cell}"`).join(','))
-        ].join('\\n');
-        filename = `attendance-${eventAttendance.event.name}-${new Date().toISOString().split('T')[0]}.csv`;
-      } else if (viewMode === 'student' && studentAttendance) {
-        csvContent = [
-          ['Event', 'Check In Date', 'Check In Time', 'Check Out Date', 'Check Out Time', 'Duration', 'Status'].join(','),
-          ...studentAttendance.records.map(record => [
-            record.event.name,
-            record.checkInDate,
-            record.checkInTimeFormatted,
-            record.checkOutDate || '',
-            record.checkOutTimeFormatted || '',
-            record.durationFormatted,
-            record.isActive ? 'Active' : 'Completed'
-          ].map(cell => `"${cell}"`).join(','))
-        ].join('\\n');
-        filename = `student-attendance-${studentAttendance.student.name}-${new Date().toISOString().split('T')[0]}.csv`;
-      }
-
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) {
-      console.error('Export failed:', error);
+  const getRankingDescription = () => {
+    switch (rankingCategory) {
+      case 'totalTime': return 'Ranked by total time spent (including nullified sessions)';
+      case 'validTime': return 'Ranked by valid attendance time only';
+      case 'consistency': return 'Ranked by consistency (students with clean records ranked higher)';
+      default: return '';
     }
   };
 
-  const currentData = viewMode === 'event' ? eventAttendance : studentAttendance;
-  const isLoading = viewMode === 'event' ? eventLoading : studentLoading;
+  const getEventStatus = (event) => {
+    if (!event) return 'unknown';
+    const now = new Date();
+    const startDate = new Date(event.startTime);
+    const endDate = new Date(event.endTime);
+
+    if (event.manuallyEnded) return 'ended';
+    if (event.manuallyStarted) return 'live';
+    if (now < startDate) return 'upcoming';
+    if (now > endDate) return 'ended';
+    return 'ongoing';
+  };
+
+  const selectedEventData = events.find(e => e.id.toString() === selectedEvent);
+  const eventStatus = getEventStatus(selectedEventData);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Student Attendance Records</h2>
+          <h2 className="text-2xl font-bold text-gray-900">Comprehensive Attendance Analytics</h2>
           <p className="text-gray-600 mt-1">
-            Direct attendance data from database • Last updated: {lastUpdated.toLocaleTimeString()}
+            Advanced attendance tracking with nullification and ranking system • Last updated: {lastUpdated.toLocaleTimeString()}
           </p>
         </div>
         <div className="flex items-center space-x-3">
           <button
             onClick={handleRefresh}
-            disabled={(!selectedEvent && viewMode === 'event') || (!selectedStudent && viewMode === 'student')}
+            disabled={!selectedEvent}
             className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             <RefreshCw size={16} />
             <span>Refresh</span>
           </button>
 
-          {currentData && (
+          {viewMode === 'rankings' && attendanceRankings && (
             <button
-              onClick={handleExport}
+              onClick={handleExportRankings}
               className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
             >
               <Download size={16} />
-              <span>Export CSV</span>
+              <span>Export Rankings</span>
             </button>
           )}
         </div>
@@ -145,213 +190,241 @@ export default function SimpleAttendance() {
             <label className="block text-sm font-medium text-gray-700 mb-2">View Mode</label>
             <select
               value={viewMode}
-              onChange={(e) => {
-                setViewMode(e.target.value);
-                setSelectedEvent('');
-                setSelectedStudent('');
-              }}
+              onChange={(e) => setViewMode(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="event">Event Attendance</option>
-              <option value="student">Student History</option>
+              <option value="comprehensive">Comprehensive View</option>
+              <option value="rankings">Student Rankings</option>
             </select>
           </div>
 
           {/* Event Filter */}
           <div className="flex-1 min-w-64">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {viewMode === 'event' ? 'Select Event' : 'Filter by Event (Optional)'}
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Event</label>
             <select
               value={selectedEvent}
               onChange={(e) => setSelectedEvent(e.target.value)}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">-- {viewMode === 'event' ? 'Select Event' : 'All Events'} --</option>
+              <option value="">-- Select Event --</option>
               {events.map((event) => (
                 <option key={event.id} value={event.id}>
-                  {event.name}
+                  {event.name} {event.isActive ? '(Active)' : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Student Filter (only for student mode) */}
-          {viewMode === 'student' && (
+          {/* Ranking Category (only for rankings mode) */}
+          {viewMode === 'rankings' && (
             <div className="flex-1 min-w-64">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Student ID</label>
-              <input
-                type="text"
-                placeholder="Enter student ID or select from event data"
-                value={selectedStudent}
-                onChange={(e) => setSelectedStudent(e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-2">Ranking Category</label>
+              <select
+                value={rankingCategory}
+                onChange={(e) => setRankingCategory(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-              />
+              >
+                <option value="totalTime">Total Attendance Time</option>
+                <option value="validTime">Valid Time Only</option>
+                <option value="consistency">Consistency Score</option>
+              </select>
             </div>
           )}
         </div>
+
+        {/* Event Status */}
+        {selectedEventData && (
+          <div className="flex items-center justify-between bg-gray-50 rounded-lg p-3">
+            <div className="flex items-center space-x-3">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <div>
+                <div className="font-medium text-gray-900">{selectedEventData.name}</div>
+                <div className="text-sm text-gray-500">
+                  {new Date(selectedEventData.startTime).toLocaleDateString()} - {new Date(selectedEventData.endTime).toLocaleDateString()}
+                </div>
+              </div>
+            </div>
+            <StatusBadge status={eventStatus} />
+          </div>
+        )}
       </div>
 
-      {/* Summary Statistics */}
-      {currentData && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="card bg-blue-50 border border-blue-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-blue-600 font-medium">
-                  {viewMode === 'event' ? 'Total Records' : 'Total Sessions'}
-                </p>
-                <p className="text-2xl font-bold text-blue-900">
-                  {viewMode === 'event' ? currentData.summary?.totalRecords : currentData.summary?.totalSessions}
-                </p>
-              </div>
-              <Calendar className="w-10 h-10 text-blue-600" />
-            </div>
-          </div>
-
-          <div className="card bg-green-50 border border-green-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-green-600 font-medium">
-                  {viewMode === 'event' ? 'Unique Students' : 'Completed Sessions'}
-                </p>
-                <p className="text-2xl font-bold text-green-900">
-                  {viewMode === 'event' ? currentData.summary?.uniqueStudents : currentData.summary?.completedSessions}
-                </p>
-              </div>
-              <Users className="w-10 h-10 text-green-600" />
-            </div>
-          </div>
-
-          <div className="card bg-purple-50 border border-purple-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-purple-600 font-medium">Currently Active</p>
-                <p className="text-2xl font-bold text-purple-900">
-                  {viewMode === 'event' ? currentData.summary?.activeStudents : currentData.summary?.activeSessions}
-                </p>
-              </div>
-              <User className="w-10 h-10 text-purple-600" />
-            </div>
-          </div>
-
-          <div className="card bg-orange-50 border border-orange-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-orange-600 font-medium">Total Time</p>
-                <p className="text-2xl font-bold text-orange-900">
-                  {currentData.summary?.totalHoursSpent || 0}h
-                </p>
-              </div>
-              <Clock className="w-10 h-10 text-orange-600" />
-            </div>
-          </div>
-        </div>
+      {/* Event Status Alerts */}
+      {selectedEventData && eventStatus === 'ended' && (
+        <WarningAlert
+          type="info"
+          message="This event has ended. All attendance records show final data including nullified sessions."
+          severity="info"
+        />
+      )}
+      
+      {selectedEventData && eventStatus === 'live' && (
+        <WarningAlert
+          type="warning"
+          message="This event is currently live. Data updates in real-time and may show ongoing sessions."
+          severity="warning"
+        />
       )}
 
-      {/* Data Display */}
-      {isLoading ? (
-        <div className="card text-center py-16">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading attendance records...</p>
+      {/* Content */}
+      {!selectedEvent ? (
+        <div className="card text-center py-16 text-gray-500">
+          <Calendar className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+          <p className="text-lg">Select an event to view attendance analytics</p>
         </div>
-      ) : currentData ? (
-        <div className="card">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-semibold">
-              {viewMode === 'event' 
-                ? `Attendance Records for ${currentData.event?.name || 'Event'}` 
-                : `Attendance History for ${currentData.student?.name || 'Student'}`
-              }
-            </h3>
-            <span className="text-sm text-gray-500">
-              {currentData.recordCount || 0} records found
-            </span>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  {viewMode === 'event' ? (
-                    <>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                    </>
-                  ) : (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Event</th>
-                  )}
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check In</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Check Out</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duration</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {currentData.records?.map((record) => (
-                  <tr key={record.id} className="hover:bg-gray-50">
-                    {viewMode === 'event' ? (
-                      <>
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="font-medium text-gray-900">{record.student.name}</div>
-                            <div className="text-sm text-gray-500">{record.student.rollNumber}</div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-gray-900">{record.student.department || 'N/A'}</td>
-                      </>
-                    ) : (
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900">{record.event.name}</div>
-                      </td>
-                    )}
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      <div>{record.checkInDate}</div>
-                      <div className="text-xs text-gray-500">{record.checkInTimeFormatted}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {record.checkOutDate ? (
-                        <>
-                          <div>{record.checkOutDate}</div>
-                          <div className="text-xs text-gray-500">{record.checkOutTimeFormatted}</div>
-                        </>
-                      ) : (
-                        <span className="text-gray-400">Not checked out</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 font-medium">
-                      {record.durationFormatted}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        record.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        {record.isActive ? 'Active' : 'Completed'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+      ) : viewMode === 'comprehensive' ? (
+        <AttendanceSummaryTable eventId={selectedEvent} />
+      ) : (
+        // Rankings View
+        <div className="space-y-6">
+          {rankingsLoading ? (
+            <div className="card text-center py-16">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading attendance rankings...</p>
+            </div>
+          ) : attendanceRankings ? (
+            <>
+              {/* Rankings Statistics */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="card bg-blue-50 border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Total Students</p>
+                      <p className="text-2xl font-bold text-blue-900">
+                        {attendanceRankings.summaries?.length || 0}
+                      </p>
+                    </div>
+                    <Users className="w-10 h-10 text-blue-600" />
+                  </div>
+                </div>
 
-          {(!currentData.records || currentData.records.length === 0) && (
-            <div className="text-center py-8 text-gray-500">
-              No attendance records found
+                <div className="card bg-green-50 border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">Clean Records</p>
+                      <p className="text-2xl font-bold text-green-900">
+                        {attendanceRankings.summaries?.filter(s => !s.hasImproperCheckouts).length || 0}
+                      </p>
+                    </div>
+                    <Award className="w-10 h-10 text-green-600" />
+                  </div>
+                </div>
+
+                <div className="card bg-orange-50 border border-orange-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-orange-600 font-medium">With Issues</p>
+                      <p className="text-2xl font-bold text-orange-900">
+                        {attendanceRankings.summaries?.filter(s => s.hasImproperCheckouts).length || 0}
+                      </p>
+                    </div>
+                    <AlertTriangle className="w-10 h-10 text-orange-600" />
+                  </div>
+                </div>
+
+                <div className="card bg-purple-50 border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Top Student</p>
+                      <p className="text-lg font-bold text-purple-900">
+                        {attendanceRankings.summaries?.[0]?.student?.name?.split(' ')[0] || 'N/A'}
+                      </p>
+                    </div>
+                    <Trophy className="w-10 h-10 text-purple-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Rankings Table */}
+              <div className="card">
+                <div className="flex justify-between items-center mb-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{getRankingTitle()}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{getRankingDescription()}</p>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 border-b">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Student</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total Time</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Valid Time</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nullified Time</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sessions</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {attendanceRankings.summaries?.map((summary, index) => (
+                        <tr key={summary.id} className={`hover:bg-gray-50 ${index < 3 ? 'bg-yellow-50' : ''}`}>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center">
+                              {index === 0 && <Trophy className="w-5 h-5 text-yellow-500 mr-2" />}
+                              {index === 1 && <Award className="w-5 h-5 text-gray-400 mr-2" />}
+                              {index === 2 && <Award className="w-5 h-5 text-orange-500 mr-2" />}
+                              <span className={`font-bold ${index < 3 ? 'text-lg' : 'text-base'}`}>
+                                #{index + 1}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div>
+                              <div className="font-medium text-gray-900">{summary.student.name}</div>
+                              <div className="text-sm text-gray-500">
+                                {summary.student.regNo} • {summary.student.department}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-gray-900">
+                            {summary.totalValidDurationFormatted}
+                            {summary.totalNullifiedDuration > 0 && (
+                              <span className="text-orange-600 text-xs block">
+                                + {summary.totalNullifiedDurationFormatted} nullified
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-green-600">
+                            {summary.totalValidDurationFormatted}
+                          </td>
+                          <td className="px-6 py-4 text-sm font-medium text-orange-600">
+                            {summary.totalNullifiedDurationFormatted}
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900">
+                            <div>{summary.totalSessions} total</div>
+                            {summary.nullifiedSessions > 0 && (
+                              <div className="text-xs text-orange-600">
+                                {summary.nullifiedSessions} nullified
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <StatusBadge 
+                              status={summary.hasImproperCheckouts ? 'warning' : 'success'} 
+                              label={summary.hasImproperCheckouts ? 'Has Issues' : 'Clean Record'}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {(!attendanceRankings.summaries || attendanceRankings.summaries.length === 0) && (
+                  <div className="text-center py-8 text-gray-500">
+                    No attendance records found for this event
+                  </div>
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="card text-center py-16 text-gray-500">
+              <TrendingUp className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+              <p className="text-lg">No ranking data available for selected event</p>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="card text-center py-16 text-gray-500">
-          <Clock className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-          <p className="text-lg">
-            {viewMode === 'event' 
-              ? 'Select an event to view attendance records' 
-              : 'Enter a student ID to view their attendance history'
-            }
-          </p>
         </div>
       )}
     </div>

@@ -112,6 +112,18 @@ export default function Events() {
     },
   });
 
+  // Restart event mutation
+  const restartMutation = useMutation({
+    mutationFn: (id) => adminApi.restartEvent(id),
+    onSuccess: () => {
+      toast.success('Event restarted successfully!');
+      queryClient.invalidateQueries(['adminEvents']);
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to restart event');
+    },
+  });
+
   const openCreateModal = () => {
     setEditingEvent(null);
     setFormData({
@@ -187,6 +199,12 @@ export default function Events() {
   const handleManualEnd = (event) => {
     if (window.confirm(`Manually end "${event.name}" now? This will prevent all further check-ins.`)) {
       endMutation.mutate(event.id);
+    }
+  };
+
+  const handleRestart = (event) => {
+    if (window.confirm(`Restart "${event.name}"? This will allow check-ins again and clear the ended status.`)) {
+      restartMutation.mutate(event.id);
     }
   };
 
@@ -304,56 +322,69 @@ export default function Events() {
                     </td>
                     <td className="px-6 py-4 text-right text-sm font-medium">
                       <div className="flex justify-end space-x-2">
-                        {/* Manual Start Button */}
+                        {/* Event Control Buttons */}
                         {!event.manuallyStarted && !event.manuallyEnded && (
                           <button
                             onClick={() => handleManualStart(event)}
-                            className="text-green-600 hover:text-green-900 flex items-center gap-1 px-2 py-1 border border-green-300 rounded hover:bg-green-50"
+                            className="text-green-600 hover:text-green-900 flex items-center gap-1 px-3 py-1 border border-green-300 rounded hover:bg-green-50 transition-colors"
                             title="Start Event Now"
                           >
                             <Play className="w-4 h-4" />
-                            <span className="text-xs">Start</span>
+                            <span className="text-sm">Start</span>
                           </button>
                         )}
                         
-                        {/* Manual End Button */}
                         {event.manuallyStarted && !event.manuallyEnded && (
                           <button
                             onClick={() => handleManualEnd(event)}
-                            className="text-red-600 hover:text-red-900 flex items-center gap-1 px-2 py-1 border border-red-300 rounded hover:bg-red-50"
+                            className="text-red-600 hover:text-red-900 flex items-center gap-1 px-3 py-1 border border-red-300 rounded hover:bg-red-50 transition-colors"
                             title="End Event Now"
                           >
                             <Square className="w-4 h-4" />
-                            <span className="text-xs">End</span>
+                            <span className="text-sm">End</span>
+                          </button>
+                        )}
+                        
+                        {event.manuallyEnded && (
+                          <button
+                            onClick={() => handleRestart(event)}
+                            className="text-blue-600 hover:text-blue-900 flex items-center gap-1 px-3 py-1 border border-blue-300 rounded hover:bg-blue-50 transition-colors"
+                            title="Restart Event"
+                          >
+                            <Play className="w-4 h-4" />
+                            <span className="text-sm">Restart</span>
                           </button>
                         )}
                         
                         {/* Status badges */}
-                        {event.manuallyStarted && (
-                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                            Live
+                        {event.manuallyStarted && !event.manuallyEnded && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded font-medium">
+                            🟢 Live
                           </span>
                         )}
                         {event.manuallyEnded && (
-                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                            Ended
+                          <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded font-medium">
+                            🔴 Ended
                           </span>
                         )}
                         
-                        <button
-                          onClick={() => openEditModal(event)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-5 h-5" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(event)}
-                          className="text-red-600 hover:text-red-900"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
+                        {/* Edit and Delete buttons */}
+                        <div className="border-l border-gray-300 pl-2 ml-2 flex space-x-1">
+                          <button
+                            onClick={() => openEditModal(event)}
+                            className="text-blue-600 hover:text-blue-900 p-1 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit Event"
+                          >
+                            <Edit2 className="w-5 h-5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(event)}
+                            className="text-red-600 hover:text-red-900 p-1 hover:bg-red-50 rounded transition-colors"
+                            title="Delete Event"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        </div>
                       </div>
                     </td>
                   </tr>

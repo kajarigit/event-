@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { 
   Star, 
@@ -36,32 +36,51 @@ export default function DetailedFeedbackRankings() {
 
   const events = eventsData?.data?.data || [];
 
+  // Auto-select first active event
+  useEffect(() => {
+    if (events.length > 0 && !selectedEvent) {
+      const activeEvent = events.find(event => event.isActive) || events[0];
+      console.log('Auto-selecting event:', activeEvent.name, 'ID:', activeEvent.id);
+      setSelectedEvent(activeEvent.id);
+    }
+  }, [events, selectedEvent]);
+
   // Fetch detailed feedback rankings
   const { 
     data: rankingsData, 
     isLoading: rankingsLoading,
-    refetch: refetchRankings 
+    refetch: refetchRankings,
+    error: rankingsError
   } = useQuery({
     queryKey: ['detailed-feedback-rankings', selectedEvent, selectedDepartment, sortBy, currentPage],
-    queryFn: () => adminApi.getDetailedFeedbackRankings({ 
-      eventId: selectedEvent || undefined,
-      department: selectedDepartment || undefined,
-      sortBy,
-      page: currentPage,
-      limit: 25
-    }),
+    queryFn: () => {
+      console.log('Fetching rankings with eventId:', selectedEvent);
+      return adminApi.getDetailedFeedbackRankings({ 
+        eventId: selectedEvent || undefined,
+        department: selectedDepartment || undefined,
+        sortBy,
+        page: currentPage,
+        limit: 25
+      });
+    },
+    enabled: !!selectedEvent,
   });
 
   // Fetch feedback analytics overview
   const { 
     data: overviewData, 
-    isLoading: overviewLoading 
+    isLoading: overviewLoading,
+    error: overviewError 
   } = useQuery({
     queryKey: ['feedback-analytics-overview', selectedEvent, selectedDepartment],
-    queryFn: () => adminApi.getFeedbackAnalyticsOverview({ 
-      eventId: selectedEvent || undefined,
-      department: selectedDepartment || undefined
-    }),
+    queryFn: () => {
+      console.log('Fetching overview with eventId:', selectedEvent);
+      return adminApi.getFeedbackAnalyticsOverview({ 
+        eventId: selectedEvent || undefined,
+        department: selectedDepartment || undefined
+      });
+    },
+    enabled: !!selectedEvent,
   });
 
   // Fetch stall feedback details when a stall is selected
@@ -74,11 +93,29 @@ export default function DetailedFeedbackRankings() {
     enabled: !!selectedStall
   });
 
-  const rankings = rankingsData?.data?.rankings || [];
-  const pagination = rankingsData?.data?.pagination || {};
-  const summary = rankingsData?.data?.summary || {};
-  const overview = overviewData?.data || {};
-  const stallDetails = stallDetailsData?.data || {};
+  const rankings = rankingsData?.data?.data?.rankings || rankingsData?.data?.rankings || [];
+  const pagination = rankingsData?.data?.data?.pagination || rankingsData?.data?.pagination || {};
+  const summary = rankingsData?.data?.data?.summary || rankingsData?.data?.summary || {};
+  const overview = overviewData?.data?.data || overviewData?.data || {};
+  const stallDetails = stallDetailsData?.data?.data || stallDetailsData?.data || {};
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Rankings Data:', rankingsData);
+    if (rankingsData?.data) {
+      console.log('Rankings Data Structure:', {
+        success: rankingsData.data.success,
+        rankings: rankingsData.data.data?.rankings || rankingsData.data.rankings,
+        summary: rankingsData.data.data?.summary || rankingsData.data.summary,
+        fullData: rankingsData.data
+      });
+    }
+    console.log('Rankings:', rankings);
+    console.log('Summary:', summary);
+    console.log('Overview:', overview);
+    if (rankingsError) console.error('Rankings Error:', rankingsError);
+    if (overviewError) console.error('Overview Error:', overviewError);
+  }, [rankingsData, rankings, summary, overview, rankingsError, overviewError]);
 
   // Get unique departments from rankings
   const departments = [...new Set(rankings.map(r => r.department).filter(Boolean))];

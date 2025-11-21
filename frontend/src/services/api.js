@@ -92,6 +92,7 @@ export const studentApi = {
   getMyVotes: (eventId) => api.get(`/student/votes/${eventId}`),
   getMyFeedbacks: (eventId) => api.get(`/student/feedbacks/${eventId}`),
   getAttendance: (eventId) => api.get(`/student/attendance/${eventId}`),
+  getAttendanceSummary: (eventId) => api.get(`/student/attendance-summary/${eventId}`),
   getStatus: (eventId) => api.get(`/student/status/${eventId}`),
 };
 
@@ -124,6 +125,8 @@ export const adminApi = {
   toggleEventActive: (id) => api.put(`/admin/events/${id}/toggle-active`),
   manuallyStartEvent: (id) => api.patch(`/admin/events/${id}/start`),
   manuallyEndEvent: (id) => api.patch(`/admin/events/${id}/end`),
+  restartEvent: (id) => api.patch(`/admin/events/${id}/restart`),
+  getEventAttendanceSummary: (eventId, params) => api.get(`/admin/events/${eventId}/attendance-summary`, { params }),
 
   // Stalls
   getStalls: (params) => api.get('/admin/stalls', { params }),

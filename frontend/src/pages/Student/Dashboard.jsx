@@ -13,6 +13,7 @@ import StudentVoting from './Voting';
 import StudentFeedback from './Feedback';
 import StudentAttendance from './Attendance';
 import AttendanceHistory from './AttendanceHistory';
+import StudentAttendanceSummary from './AttendanceSummary';
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth();
@@ -69,6 +70,7 @@ export default function StudentDashboard() {
     { name: 'Voting', path: 'voting', icon: Vote, requiresCheckin: true },
     { name: 'Feedback', path: 'feedback', icon: MessageSquare, requiresCheckin: true },
     { name: 'Attendance', path: 'attendance', icon: Clock, requiresCheckin: false },
+    { name: 'Summary', path: 'attendance-summary', icon: History, requiresCheckin: false },
     { name: 'History', path: 'history', icon: History, requiresCheckin: false },
   ];
 
@@ -271,6 +273,7 @@ export default function StudentDashboard() {
               } 
             />
             <Route path="attendance" element={<StudentAttendance />} />
+            <Route path="attendance-summary" element={<StudentAttendanceSummary />} />
             <Route path="history" element={<AttendanceHistory />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>

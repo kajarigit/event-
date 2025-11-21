@@ -284,13 +284,14 @@ const getStallFeedbackDetails = async (req, res, next) => {
 
 /**
  * @desc    Get feedback analytics overview
- * @route   GET /api/admin/analytics/feedback-overview
+ * @route   GET /api/admin/analytics/feedback-analytics-overview
  * @access  Private (Admin)
  */
 const getFeedbackAnalyticsOverview = async (req, res, next) => {
   try {
     const { eventId, department } = req.query;
     
+    // Build where clauses
     let whereClause = {};
     let stallWhereClause = {};
     
@@ -303,162 +304,133 @@ const getFeedbackAnalyticsOverview = async (req, res, next) => {
       stallWhereClause.department = department;
     }
 
-    // Overall statistics
-    const overallStats = await sequelize.query(`
+    // Get basic statistics using Sequelize models
+    const stallsCount = await Stall.count({
+      where: { ...stallWhereClause, isActive: true }
+    });
+
+    const feedbacksCount = await Feedback.count({
+      where: whereClause,
+      include: [{
+        model: Stall,
+        as: 'stall',
+        where: stallWhereClause,
+        required: true
+      }]
+    });
+
+    const uniqueStudentsCount = await Feedback.count({
+      where: whereClause,
+      include: [{
+        model: Stall,
+        as: 'stall',
+        where: stallWhereClause,
+        required: true
+      }],
+      distinct: true,
+      col: 'studentId'
+    });
+
+    // Get average ratings using raw query to avoid GROUP BY issues
+    const avgRatingsResult = await sequelize.query(`
       SELECT 
-        COUNT(DISTINCT s.id) as "totalStalls",
-        COUNT(DISTINCT f.id) as "totalFeedbacks",
-        COUNT(DISTINCT f."studentId") as "uniqueStudents",
         ROUND(AVG(f."averageRating"), 2) as "overallAverageRating",
-        
-        -- Category-wise averages
         ROUND(AVG(f."qualityRating"), 2) as "avgQualityRating",
-        ROUND(AVG(f."serviceRating"), 2) as "avgServiceRating",
+        ROUND(AVG(f."serviceRating"), 2) as "avgServiceRating", 
         ROUND(AVG(f."innovationRating"), 2) as "avgInnovationRating",
         ROUND(AVG(f."presentationRating"), 2) as "avgPresentationRating",
         ROUND(AVG(f."valueRating"), 2) as "avgValueRating"
-        
-      FROM stalls s
-      LEFT JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
+      FROM feedbacks f
+      INNER JOIN stalls s ON f."stallId" = s.id
+      WHERE s."isActive" = true
+        ${eventId ? 'AND f."eventId" = :eventId AND s."eventId" = :eventId' : ''}
         ${department ? 'AND s.department = :department' : ''}
     `, {
       replacements: { eventId, department },
       type: sequelize.QueryTypes.SELECT
     });
 
-    // Top performing stalls in each category
-    const topPerformers = await sequelize.query(`
-      SELECT 
-        'quality' as category,
-        s.name as "stallName",
-        s.department,
-        ROUND(AVG(f."qualityRating"), 2) as "avgRating",
-        COUNT(f.id) as "feedbackCount"
-      FROM stalls s
-      INNER JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
-        ${department ? 'AND s.department = :department' : ''}
-      GROUP BY s.id, s.name, s.department
-      HAVING COUNT(f.id) >= 3
-      ORDER BY "avgRating" DESC
-      LIMIT 3
-      
-      UNION ALL
-      
-      SELECT 
-        'service' as category,
-        s.name as "stallName",
-        s.department,
-        ROUND(AVG(f."serviceRating"), 2) as "avgRating",
-        COUNT(f.id) as "feedbackCount"
-      FROM stalls s
-      INNER JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
-        ${department ? 'AND s.department = :department' : ''}
-      GROUP BY s.id, s.name, s.department
-      HAVING COUNT(f.id) >= 3
-      ORDER BY "avgRating" DESC
-      LIMIT 3
-      
-      UNION ALL
-      
-      SELECT 
-        'innovation' as category,
-        s.name as "stallName",
-        s.department,
-        ROUND(AVG(f."innovationRating"), 2) as "avgRating",
-        COUNT(f.id) as "feedbackCount"
-      FROM stalls s
-      INNER JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
-        ${department ? 'AND s.department = :department' : ''}
-      GROUP BY s.id, s.name, s.department
-      HAVING COUNT(f.id) >= 3
-      ORDER BY "avgRating" DESC
-      LIMIT 3
-      
-      UNION ALL
-      
-      SELECT 
-        'presentation' as category,
-        s.name as "stallName",
-        s.department,
-        ROUND(AVG(f."presentationRating"), 2) as "avgRating",
-        COUNT(f.id) as "feedbackCount"
-      FROM stalls s
-      INNER JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
-        ${department ? 'AND s.department = :department' : ''}
-      GROUP BY s.id, s.name, s.department
-      HAVING COUNT(f.id) >= 3
-      ORDER BY "avgRating" DESC
-      LIMIT 3
-      
-      UNION ALL
-      
-      SELECT 
-        'value' as category,
-        s.name as "stallName", 
-        s.department,
-        ROUND(AVG(f."valueRating"), 2) as "avgRating",
-        COUNT(f.id) as "feedbackCount"
-      FROM stalls s
-      INNER JOIN feedbacks f ON f."stallId" = s.id ${eventId ? 'AND f."eventId" = :eventId' : ''}
-      WHERE s."isActive" = true 
-        ${eventId ? 'AND s."eventId" = :eventId' : ''}
-        ${department ? 'AND s.department = :department' : ''}
-      GROUP BY s.id, s.name, s.department
-      HAVING COUNT(f.id) >= 3
-      ORDER BY "avgRating" DESC
-      LIMIT 3
-    `, {
-      replacements: { eventId, department },
-      type: sequelize.QueryTypes.SELECT
-    });
+    const ratings = avgRatingsResult[0] || {};
 
-    // Group top performers by category
-    const topPerformersByCategory = {};
-    topPerformers.forEach(performer => {
-      if (!topPerformersByCategory[performer.category]) {
-        topPerformersByCategory[performer.category] = [];
-      }
-      topPerformersByCategory[performer.category].push({
-        stallName: performer.stallName,
-        department: performer.department,
-        avgRating: parseFloat(performer.avgRating),
-        feedbackCount: parseInt(performer.feedbackCount)
+    // Get top performing stalls for each category using raw SQL
+    const getTopStalls = async (ratingField) => {
+      const results = await sequelize.query(`
+        SELECT 
+          s.name as "stallName",
+          s.department,
+          ROUND(AVG(f."${ratingField}"), 2) as "avgRating",
+          COUNT(f.id) as "feedbackCount"
+        FROM stalls s
+        INNER JOIN feedbacks f ON f."stallId" = s.id
+        WHERE s."isActive" = true
+          ${eventId ? 'AND f."eventId" = :eventId AND s."eventId" = :eventId' : ''}
+          ${department ? 'AND s.department = :department' : ''}
+        GROUP BY s.id, s.name, s.department
+        HAVING COUNT(f.id) >= 3
+        ORDER BY AVG(f."${ratingField}") DESC
+        LIMIT 3
+      `, {
+        replacements: { eventId, department },
+        type: sequelize.QueryTypes.SELECT
       });
+      
+      return results;
+    };
+
+    const topQuality = await getTopStalls('qualityRating');
+    const topService = await getTopStalls('serviceRating');
+    const topInnovation = await getTopStalls('innovationRating');
+    const topPresentation = await getTopStalls('presentationRating');
+    const topValue = await getTopStalls('valueRating');
+
+    // Get rating distribution using raw SQL
+    const ratingDistribution = await sequelize.query(`
+      SELECT 
+        FLOOR(f."averageRating") as "ratingRange",
+        COUNT(f.id) as "count"
+      FROM feedbacks f
+      INNER JOIN stalls s ON f."stallId" = s.id
+      WHERE s."isActive" = true
+        ${eventId ? 'AND f."eventId" = :eventId AND s."eventId" = :eventId' : ''}
+        ${department ? 'AND s.department = :department' : ''}
+      GROUP BY FLOOR(f."averageRating")
+      ORDER BY FLOOR(f."averageRating") ASC
+    `, {
+      replacements: { eventId, department },
+      type: sequelize.QueryTypes.SELECT
     });
 
-    const summary = overallStats[0];
-    
+    // Format response
+    const overallStats = {
+      totalStalls: stallsCount,
+      totalFeedbacks: feedbacksCount,
+      uniqueStudents: uniqueStudentsCount,
+      overallAverageRating: parseFloat(ratings.overallAverageRating || 0).toFixed(2),
+      avgQualityRating: parseFloat(ratings.avgQualityRating || 0).toFixed(2),
+      avgServiceRating: parseFloat(ratings.avgServiceRating || 0).toFixed(2),
+      avgInnovationRating: parseFloat(ratings.avgInnovationRating || 0).toFixed(2),
+      avgPresentationRating: parseFloat(ratings.avgPresentationRating || 0).toFixed(2),
+      avgValueRating: parseFloat(ratings.avgValueRating || 0).toFixed(2)
+    };
+
+    const topPerformers = [
+      ...topQuality.map(item => ({ ...item, category: 'quality' })),
+      ...topService.map(item => ({ ...item, category: 'service' })),
+      ...topInnovation.map(item => ({ ...item, category: 'innovation' })),
+      ...topPresentation.map(item => ({ ...item, category: 'presentation' })),
+      ...topValue.map(item => ({ ...item, category: 'value' }))
+    ];
+
     res.status(200).json({
       success: true,
       data: {
-        summary: {
-          totalStalls: parseInt(summary.totalStalls),
-          totalFeedbacks: parseInt(summary.totalFeedbacks),
-          uniqueStudents: parseInt(summary.uniqueStudents),
-          overallAverageRating: parseFloat(summary.overallAverageRating || 0),
-          categoryAverages: {
-            quality: parseFloat(summary.avgQualityRating || 0),
-            service: parseFloat(summary.avgServiceRating || 0),
-            innovation: parseFloat(summary.avgInnovationRating || 0),
-            presentation: parseFloat(summary.avgPresentationRating || 0),
-            value: parseFloat(summary.avgValueRating || 0)
-          }
-        },
-        topPerformers: topPerformersByCategory
+        overallStats: overallStats,
+        topPerformers: topPerformers,
+        ratingDistribution: ratingDistribution
       }
     });
   } catch (error) {
-    console.error('Error getting feedback analytics overview:', error);
+    console.error('Error in getFeedbackAnalyticsOverview:', error);
     next(error);
   }
 };

@@ -34,8 +34,28 @@ const Attendance = sequelize.define('Attendance', {
     allowNull: true
   },
   status: {
-    type: DataTypes.ENUM('checked-in', 'checked-out'),
+    type: DataTypes.ENUM('checked-in', 'checked-out', 'auto-checkout'),
     defaultValue: 'checked-in'
+  },
+  isNullified: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    comment: 'True if this session was nullified due to improper checkout'
+  },
+  nullifiedDuration: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'Duration in seconds that was nullified for this session'
+  },
+  nullifiedReason: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'Reason for nullification (e.g., "Event stopped - auto checkout")'
+  },
+  eventStopTime: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    comment: 'Timestamp when event was stopped for this session'
   }
 }, {
   tableName: 'attendances',

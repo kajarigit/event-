@@ -25,13 +25,13 @@ import UsersManagement from './Users';
 import VolunteersManagement from './Volunteers';
 import VolunteerScanTracking from './VolunteerScanTracking';
 import Analytics from './Analytics';
-import ComprehensiveAnalytics from './ComprehensiveAnalytics';
 import SimpleAttendance from './SimpleAttendance';
 import TopFeedbackGivers from './TopFeedbackGivers';
 import TopStallsByDepartment from './TopStallsByDepartment';
 import DepartmentAttendanceRankings from './DepartmentAttendanceRankings';
 import ScanLogManagement from './ScanLogManagement';
 import DetailedFeedbackRankings from './DetailedFeedbackRankings';
+import EventAttendanceManagement from './EventAttendanceManagement';
 
 export default function AdminDashboard() {
   const { user, logout } = useAuth();
@@ -40,6 +40,7 @@ export default function AdminDashboard() {
   const navItems = [
     { name: 'Overview', path: '', icon: LayoutDashboard },
     { name: 'Events', path: 'events', icon: Calendar },
+    { name: 'Event Attendance', path: 'event-attendance', icon: Activity },
     { name: 'Stalls', path: 'stalls', icon: Building2 },
     { name: 'Users', path: 'users', icon: Users },
     { name: 'Volunteers', path: 'volunteers', icon: UserCheck },
@@ -51,7 +52,6 @@ export default function AdminDashboard() {
     { name: 'Top Stalls Rankings', path: 'top-stalls-department', icon: Vote },
     { name: 'Department Attendance', path: 'department-attendance', icon: TrendingUp },
     { name: 'Scan Log Management', path: 'scan-logs', icon: Activity },
-    { name: 'Attendance Detail', path: 'comprehensive-analytics', icon: BarChart3 },
   ];
 
   const toggleSidebar = () => {
@@ -158,6 +158,7 @@ export default function AdminDashboard() {
           <Routes>
             <Route index element={<AdminOverview />} />
             <Route path="events" element={<Events />} />
+            <Route path="event-attendance" element={<EventAttendanceManagement />} />
             <Route path="stalls" element={<Stalls />} />
             <Route path="users" element={<UsersManagement />} />
             <Route path="volunteers" element={<VolunteersManagement />} />
@@ -169,7 +170,6 @@ export default function AdminDashboard() {
             <Route path="top-stalls-department" element={<TopStallsByDepartment />} />
             <Route path="department-attendance" element={<DepartmentAttendanceRankings />} />
             <Route path="scan-logs" element={<ScanLogManagement />} />
-            <Route path="comprehensive-analytics" element={<ComprehensiveAnalytics />} />
             <Route path="*" element={<Navigate to="" replace />} />
           </Routes>
         </div>

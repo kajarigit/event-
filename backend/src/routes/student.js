@@ -109,6 +109,14 @@ router.get(
   studentController.getAttendance
 );
 
+// Get attendance summary with nullification warnings
+router.get(
+  '/attendance-summary/:eventId',
+  protect,
+  authorize('student'),
+  studentController.getAttendanceSummary
+);
+
 // Check current status
 router.get(
   '/status/:eventId',

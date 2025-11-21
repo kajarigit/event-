@@ -4,6 +4,7 @@ const Volunteer = require('./Volunteer.sequelize');
 const Event = require('./Event.sequelize');
 const Stall = require('./Stall.sequelize');
 const Attendance = require('./Attendance.sequelize');
+const StudentEventAttendanceSummary = require('./StudentEventAttendanceSummary.sequelize');
 const Feedback = require('./Feedback.sequelize');
 const Vote = require('./Vote.sequelize');
 const ScanLog = require('./ScanLog.sequelize');
@@ -14,6 +15,7 @@ const OTP = require('./OTP.sequelize')(sequelize);
 // Event associations
 Event.hasMany(Stall, { foreignKey: 'eventId', as: 'stalls' });
 Event.hasMany(Attendance, { foreignKey: 'eventId', as: 'attendances' });
+Event.hasMany(StudentEventAttendanceSummary, { foreignKey: 'eventId', as: 'attendanceSummaries' });
 Event.hasMany(Feedback, { foreignKey: 'eventId', as: 'feedbacks' });
 Event.hasMany(Vote, { foreignKey: 'eventId', as: 'votes' });
 Event.hasMany(ScanLog, { foreignKey: 'eventId', as: 'scanLogs' });
@@ -28,6 +30,7 @@ Stall.hasMany(ScanLog, { foreignKey: 'stallId', as: 'scanLogs' });
 // User associations (students, admins, stall_owners only)
 User.hasMany(Stall, { foreignKey: 'ownerId', as: 'ownedStalls' });
 User.hasMany(Attendance, { foreignKey: 'studentId', as: 'attendances' });
+User.hasMany(StudentEventAttendanceSummary, { foreignKey: 'studentId', as: 'attendanceSummaries' });
 User.hasMany(Feedback, { foreignKey: 'studentId', as: 'feedbacks' });
 User.hasMany(Vote, { foreignKey: 'studentId', as: 'votes' });
 User.hasMany(ScanLog, { foreignKey: 'userId', as: 'scanLogs' });
@@ -39,6 +42,10 @@ Volunteer.hasMany(ScanLog, { foreignKey: 'scannedBy', as: 'performedScans' });
 // Attendance associations
 Attendance.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
 Attendance.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
+
+// StudentEventAttendanceSummary associations
+StudentEventAttendanceSummary.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
+StudentEventAttendanceSummary.belongsTo(User, { foreignKey: 'studentId', as: 'student' });
 
 // Feedback associations
 Feedback.belongsTo(Event, { foreignKey: 'eventId', as: 'event' });
@@ -82,6 +89,7 @@ module.exports = {
   Event,
   Stall,
   Attendance,
+  StudentEventAttendanceSummary,
   Feedback,
   Vote,
   ScanLog,

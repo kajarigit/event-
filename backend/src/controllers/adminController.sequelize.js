@@ -1,4 +1,4 @@
-const { Event, Stall, User, Volunteer, Attendance, Feedback, Vote, ScanLog, sequelize } = require('../models/index.sequelize');
+const { Event, Stall, User, Volunteer, Attendance, StudentEventAttendanceSummary, Feedback, Vote, ScanLog, sequelize } = require('../models/index.sequelize');
 const { generateStallQR } = require('../utils/jwt');
 const { sendCredentialsEmail, sendBulkCredentialsEmails } = require('../services/emailService');
 const { generateRandomPassword } = require('../utils/passwordGenerator');
@@ -173,20 +173,286 @@ exports.manuallyEndEvent = async (req, res, next) => {
       });
     }
 
+    const transaction = await sequelize.transaction();
+    
+    try {
+      // Find all students who are currently checked in
+      const checkedInAttendances = await Attendance.findAll({
+        where: {
+          eventId: req.params.id,
+          status: 'checked-in'
+        },
+        include: [
+          {
+            model: User,
+            as: 'student',
+            attributes: ['id', 'name', 'email', 'regNo']
+          }
+        ],
+        transaction
+      });
+
+      const eventStopTime = new Date();
+      let autoCheckoutCount = 0;
+      let totalNullifiedDuration = 0;
+
+      // Process each checked-in student
+      for (const attendance of checkedInAttendances) {
+        // Calculate the duration that would be nullified
+        const checkInTime = new Date(attendance.checkInTime);
+        const nullifiedDurationMs = eventStopTime - checkInTime;
+        const nullifiedDurationSeconds = Math.floor(nullifiedDurationMs / 1000);
+        
+        // Update the attendance record with auto-checkout and nullification
+        await attendance.update({
+          status: 'auto-checkout',
+          checkOutTime: eventStopTime,
+          isNullified: true,
+          nullifiedDuration: nullifiedDurationSeconds,
+          nullifiedReason: 'Event stopped - auto checkout due to improper checkout',
+          eventStopTime: eventStopTime
+        }, { transaction });
+
+        // Update or create attendance summary
+        const [summary, created] = await StudentEventAttendanceSummary.findOrCreate({
+          where: {
+            eventId: req.params.id,
+            studentId: attendance.studentId
+          },
+          defaults: {
+            totalValidDuration: 0,
+            totalNullifiedDuration: nullifiedDurationSeconds,
+            totalSessions: 1,
+            nullifiedSessions: 1,
+            lastCheckInTime: checkInTime,
+            currentStatus: 'checked-out',
+            hasImproperCheckouts: true,
+            lastActivityDate: new Date().toISOString().split('T')[0]
+          },
+          transaction
+        });
+
+        if (!created) {
+          await summary.update({
+            totalNullifiedDuration: summary.totalNullifiedDuration + nullifiedDurationSeconds,
+            nullifiedSessions: summary.nullifiedSessions + 1,
+            currentStatus: 'checked-out',
+            hasImproperCheckouts: true,
+            lastActivityDate: new Date().toISOString().split('T')[0]
+          }, { transaction });
+        }
+
+        autoCheckoutCount++;
+        totalNullifiedDuration += nullifiedDurationSeconds;
+
+        console.log(`🚨 Auto-checkout: ${attendance.student.name} (${attendance.student.regNo}) - Nullified ${Math.floor(nullifiedDurationSeconds/60)} minutes`);
+      }
+
+      // Update the event
+      await event.update({
+        manuallyEnded: true,
+        isActive: false
+      }, { transaction });
+
+      await transaction.commit();
+
+      // Log the results
+      console.log(`✅ Event "${event.name}" ended manually`);
+      console.log(`📊 Auto-checkout summary:`);
+      console.log(`   - Students auto-checked-out: ${autoCheckoutCount}`);
+      console.log(`   - Total nullified time: ${Math.floor(totalNullifiedDuration/60)} minutes`);
+
+      res.status(200).json({
+        success: true,
+        message: 'Event ended manually',
+        data: event,
+        autoCheckoutSummary: {
+          studentsAutoCheckedOut: autoCheckoutCount,
+          totalNullifiedDurationMinutes: Math.floor(totalNullifiedDuration/60),
+          affectedStudents: checkedInAttendances.map(att => ({
+            studentId: att.studentId,
+            studentName: att.student.name,
+            regNo: att.student.regNo,
+            nullifiedMinutes: Math.floor(att.nullifiedDuration/60)
+          }))
+        }
+      });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Restart an event (clear manual end status)
+ * @route   PATCH /api/admin/events/:id/restart
+ * @access  Private (Admin)
+ */
+exports.restartEvent = async (req, res, next) => {
+  try {
+    const event = await Event.findByPk(req.params.id);
+
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Event not found',
+      });
+    }
+
+    // Only allow restarting if event was manually ended
+    if (!event.manuallyEnded) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event must be manually ended before it can be restarted',
+      });
+    }
+
     await event.update({
-      manuallyEnded: true,
-      isActive: false
+      manuallyEnded: false,
+      manuallyStarted: true,
+      isActive: true
     });
+
+    console.log(`🔄 Event "${event.name}" has been restarted`);
 
     res.status(200).json({
       success: true,
-      message: 'Event ended manually',
+      message: 'Event restarted successfully',
       data: event,
     });
   } catch (error) {
     next(error);
   }
 };
+
+/**
+ * @desc    Get attendance summaries with nullification details
+ * @route   GET /api/admin/events/:id/attendance-summary
+ * @access  Private (Admin)
+ */
+exports.getEventAttendanceSummary = async (req, res, next) => {
+  try {
+    const { id: eventId } = req.params;
+    const { 
+      page = 1, 
+      limit = 50, 
+      search = '',
+      showOnlyProblematic = false 
+    } = req.query;
+
+    const offset = (page - 1) * limit;
+    const searchCondition = search ? {
+      [Op.or]: [
+        { '$student.name$': { [Op.iLike]: `%${search}%` } },
+        { '$student.regNo$': { [Op.iLike]: `%${search}%` } },
+        { '$student.email$': { [Op.iLike]: `%${search}%` } }
+      ]
+    } : {};
+
+    const whereCondition = {
+      eventId,
+      ...searchCondition,
+      ...(showOnlyProblematic === 'true' && { hasImproperCheckouts: true })
+    };
+
+    const summaries = await StudentEventAttendanceSummary.findAndCountAll({
+      where: whereCondition,
+      include: [
+        {
+          model: User,
+          as: 'student',
+          attributes: ['id', 'name', 'email', 'regNo', 'department']
+        },
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name', 'startDate', 'endDate']
+        }
+      ],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [
+        ['hasImproperCheckouts', 'DESC'],
+        ['totalValidDuration', 'DESC'],
+        ['totalNullifiedDuration', 'DESC']
+      ]
+    });
+
+    // Get detailed attendance records for problematic cases
+    const summariesWithDetails = await Promise.all(
+      summaries.rows.map(async (summary) => {
+        const summaryData = summary.toJSON();
+        
+        if (summary.hasImproperCheckouts) {
+          // Get nullified attendance records
+          const nullifiedSessions = await Attendance.findAll({
+            where: {
+              eventId,
+              studentId: summary.studentId,
+              isNullified: true
+            },
+            attributes: ['checkInTime', 'eventStopTime', 'nullifiedDuration', 'nullifiedReason'],
+            order: [['checkInTime', 'DESC']]
+          });
+          
+          summaryData.nullifiedSessionDetails = nullifiedSessions;
+        }
+        
+        // Convert seconds to readable format
+        summaryData.totalValidDurationFormatted = formatDuration(summary.totalValidDuration);
+        summaryData.totalNullifiedDurationFormatted = formatDuration(summary.totalNullifiedDuration);
+        summaryData.totalCombinedDurationFormatted = formatDuration(
+          summary.totalValidDuration + summary.totalNullifiedDuration
+        );
+        
+        return summaryData;
+      })
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        summaries: summariesWithDetails,
+        pagination: {
+          total: summaries.count,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(summaries.count / limit)
+        },
+        statistics: {
+          totalStudents: summaries.count,
+          studentsWithProblems: summariesWithDetails.filter(s => s.hasImproperCheckouts).length,
+          totalValidHours: Math.floor(
+            summariesWithDetails.reduce((sum, s) => sum + s.totalValidDuration, 0) / 3600
+          ),
+          totalNullifiedHours: Math.floor(
+            summariesWithDetails.reduce((sum, s) => sum + s.totalNullifiedDuration, 0) / 3600
+          )
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to format duration
+function formatDuration(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  
+  if (hours > 0) {
+    return `${hours}h ${minutes}m ${secs}s`;
+  } else if (minutes > 0) {
+    return `${minutes}m ${secs}s`;
+  } else {
+    return `${secs}s`;
+  }
+}
 
 exports.toggleEventActive = async (req, res, next) => {
   try {

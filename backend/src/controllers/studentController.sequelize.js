@@ -1,4 +1,4 @@
-const { Feedback, Vote, Attendance, Stall, Event, User, sequelize } = require('../models/index.sequelize');
+const { Feedback, Vote, Attendance, StudentEventAttendanceSummary, Stall, Event, User, sequelize } = require('../models/index.sequelize');
 const { generateStudentQR } = require('../utils/jwt');
 const { Op } = require('sequelize');
 
@@ -548,6 +548,128 @@ exports.getAttendance = async (req, res, next) => {
         attendances: formattedAttendances,
         totalDurationSeconds,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get student's attendance summary with nullification warnings
+ * @route   GET /api/student/attendance-summary/:eventId
+ * @access  Private (Student)
+ */
+exports.getAttendanceSummary = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const studentId = req.user.id;
+
+    // Get attendance summary
+    const summary = await StudentEventAttendanceSummary.findOne({
+      where: {
+        eventId,
+        studentId
+      },
+      include: [
+        {
+          model: Event,
+          as: 'event',
+          attributes: ['id', 'name', 'startDate', 'endDate', 'isActive', 'manuallyStarted', 'manuallyEnded']
+        }
+      ]
+    });
+
+    if (!summary) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          hasAttendanceRecord: false,
+          totalValidHours: 0,
+          totalNullifiedHours: 0,
+          hasImproperCheckouts: false,
+          currentStatus: 'checked-out',
+          warnings: [],
+          event: null
+        }
+      });
+    }
+
+    // Get detailed nullified sessions if any
+    let nullifiedSessions = [];
+    if (summary.hasImproperCheckouts) {
+      nullifiedSessions = await Attendance.findAll({
+        where: {
+          eventId,
+          studentId,
+          isNullified: true
+        },
+        attributes: ['checkInTime', 'eventStopTime', 'nullifiedDuration', 'nullifiedReason'],
+        order: [['checkInTime', 'DESC']]
+      });
+    }
+
+    // Get current attendance status
+    const currentAttendance = await Attendance.findOne({
+      where: {
+        eventId,
+        studentId,
+        status: 'checked-in'
+      },
+      order: [['checkInTime', 'DESC']]
+    });
+
+    // Format duration helpers
+    const formatDuration = (seconds) => {
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      if (hours > 0) {
+        return `${hours}h ${minutes}m`;
+      }
+      return `${minutes}m`;
+    };
+
+    // Generate warnings
+    const warnings = [];
+    if (summary.hasImproperCheckouts) {
+      warnings.push({
+        type: 'improper_checkout',
+        message: `You have ${summary.nullifiedSessions} session(s) where you didn't check out properly. ${formatDuration(summary.totalNullifiedDuration)} of your time was nullified.`,
+        severity: 'warning'
+      });
+    }
+
+    if (currentAttendance && summary.event && !summary.event.isActive) {
+      warnings.push({
+        type: 'event_stopped',
+        message: 'The event has been stopped but you are still checked in. Your time may be nullified if you don\'t check out properly.',
+        severity: 'error'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        hasAttendanceRecord: true,
+        totalValidHours: Math.floor(summary.totalValidDuration / 3600),
+        totalValidMinutes: Math.floor((summary.totalValidDuration % 3600) / 60),
+        totalValidFormatted: formatDuration(summary.totalValidDuration),
+        totalNullifiedHours: Math.floor(summary.totalNullifiedDuration / 3600),
+        totalNullifiedMinutes: Math.floor((summary.totalNullifiedDuration % 3600) / 60),
+        totalNullifiedFormatted: formatDuration(summary.totalNullifiedDuration),
+        totalSessions: summary.totalSessions,
+        nullifiedSessions: summary.nullifiedSessions,
+        hasImproperCheckouts: summary.hasImproperCheckouts,
+        currentStatus: summary.currentStatus,
+        lastCheckInTime: summary.lastCheckInTime,
+        warnings,
+        nullifiedSessionDetails: nullifiedSessions.map(session => ({
+          checkInTime: session.checkInTime,
+          eventStopTime: session.eventStopTime,
+          nullifiedDurationFormatted: formatDuration(session.nullifiedDuration),
+          reason: session.nullifiedReason
+        })),
+        event: summary.event
+      }
     });
   } catch (error) {
     next(error);
